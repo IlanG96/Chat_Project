@@ -25,8 +25,6 @@ port = 55000
 client_socket.connect(('127.0.0.1', port))
 
 
-
-
 class ChatGUI:
     def __init__(self):
         # Create a chat window and make it visible
@@ -71,13 +69,13 @@ class ChatGUI:
 
         # create a Continue Button
         # along with action
-        self.go = Button(self.login,
-                         text="CONTINUE",
-                         font="Arial 15 bold",
-                         command=lambda: self.Login(self.username.get()))
+        self.login_button = Button(self.login,
+                                   text="CONTINUE",
+                                   font="Arial 15 bold",
+                                   command=lambda: self.Login(self.username.get()))
 
-        self.go.place(relx=0.4,
-                      rely=0.55)
+        self.login_button.place(relx=0.4,
+                                rely=0.55)
         self.Chat_Window.mainloop()
 
     # receive and send message from/to different user/s
@@ -99,6 +97,7 @@ class ChatGUI:
         HeadFont = tkFont.Font(family="Arial", size=16, weight="bold", slant="italic")
         ChatFont = tkFont.Font(family="Arial", size=14)
         SendFont = tkFont.Font(family="Arial", size=10, weight="bold")
+        self.Chat_Window.configure(bg="#6173A4")
         self.name = name
         # to show chat window
         self.Chat_Window.deiconify()
@@ -109,6 +108,9 @@ class ChatGUI:
         #                            height=800,
         #                            bg="#6173A4")
         self.Chat_Window.geometry("800x600")
+        self.user_option_label = Label(self.Chat_Window,
+                                       bg="#6173A4")
+        self.user_option_label.pack(side=RIGHT)
         self.labelHead = Label(self.Chat_Window,
                                bg="#9DA7C5",
                                text="Username:" + self.name,
@@ -133,7 +135,7 @@ class ChatGUI:
                              pady=3)
 
         self.Chat_log.place(relheight=0.745,
-                            relwidth=1,
+                            relwidth=0.8,
                             rely=0.08)
 
         self.labelBottom = Label(self.Chat_Window,
@@ -169,23 +171,22 @@ class ChatGUI:
                              relheight=0.06,
                              relwidth=0.22)
 
-        self.UserList = Button(self.Chat_Window,
+        self.UserList = Button(self.user_option_label,
                                text="User List",
                                font=SendFont,
                                width=15,
                                bg="#ABB2B9",
                                pady=10,
-                               command=lambda: self.user_list_button())
-        self.UserList.pack(anchor="w", side="bottom")
-        self.Server_files = Button(self.Chat_Window,
-                               text="Show server files",
-                               font=SendFont,
-                               width=15,
-                               bg="#ABB2B9",
-                               pady=10,
-                               command=lambda: self.user_list_button())
-        self.Server_files.pack(side=BOTTOM)
-        #self.UserList.pack(side=BOTTOM)
+                               command=lambda: self.userList_serverList_button(0))
+        self.UserList.pack(padx=3, pady=3)
+        self.Server_files = Button(self.user_option_label,
+                                   text="Show ServerFiles",
+                                   font=SendFont,
+                                   width=15,
+                                   bg="#ABB2B9",
+                                   pady=10,
+                                   command=lambda: self.userList_serverList_button(1))
+        self.Server_files.pack(padx=3, pady=3)
         # create a scroll bar
         scrollbar = Scrollbar(self.Chat_log)
 
@@ -198,23 +199,27 @@ class ChatGUI:
 
         self.Chat_log.config(state=DISABLED)
 
-    def user_list_button(self):
-        # If the user list button is pressed send a Userlist msg request
-        self.msg = MessageType.USERSLIST.name
+    # If the user list button or the server files button is pressed send a Userlist msg request or server list msg
+    # request depends on the type that entered 0=Userlist 1=Server files
+    def userList_serverList_button(self, type: int):
+        if type == 0:
+            self.msg = MessageType.USERSLIST.name
+        else:
+            self.msg = MessageType.GETLISTFILE.name
         send_thread = thread.Thread(target=self.send_msg)
         send_thread.start()
 
     # function to basically start the thread for sending messages
     def sendButton(self, msg):
         # get a msg that was entered in the text box and send her
-        self.Chat_log.config(state=DISABLED) # prevent typing in the chat log.
+        self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
         self.msg = str(msg)
         self.Msg_box.delete(0, END)
         send_thread = thread.Thread(target=self.send_msg)
         send_thread.start()
 
     def recieve_msg(self):
-        self.Chat_log.config(state=NORMAL) # Allow to change the chat log when a new msg arrive
+        self.Chat_log.config(state=NORMAL)  # Allow to change the chat log when a new msg arrive
         self.Chat_log.insert(END,
                              "Welcome to the Server! You can now chat\n")
         self.Chat_log.config(state=DISABLED)
@@ -228,16 +233,16 @@ class ChatGUI:
                     sys.exit()
                 # username_length = int(username_header.decode('UTF-8'))
                 msg_type = meg_recv['type']
-                if msg_type == MessageType.CONNECT.name:
-                    self.Chat_log.config(state=NORMAL)
-                    self.Chat_log.insert(END,
-                                         meg_recv['msg'] + "\n")
-                    self.Chat_log.config(state=DISABLED)
-                elif msg_type == MessageType.Publicmsg.name or msg_type == MessageType.Privatemsg.name or msg_type == MessageType.USERSLIST.name:
-                    self.Chat_log.config(state=NORMAL)
-                    self.Chat_log.insert(END,
-                                         meg_recv['msg'] + "\n")
-                    self.Chat_log.config(state=DISABLED)
+                # if msg_type == MessageType.CONNECT.name:
+                self.Chat_log.config(state=NORMAL)
+                self.Chat_log.insert(END,
+                                     meg_recv['msg'] + "\n")
+                self.Chat_log.config(state=DISABLED)
+                # elif msg_type == MessageType.Publicmsg.name or msg_type == MessageType.Privatemsg.name or msg_type == MessageType.USERSLIST.name:
+                #     self.Chat_log.config(state=NORMAL)
+                #     self.Chat_log.insert(END,
+                #                          meg_recv['msg'] + "\n")
+                #     self.Chat_log.config(state=DISABLED)
 
             except IOError as e:
                 if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
@@ -253,7 +258,7 @@ class ChatGUI:
         self.Chat_log.config(state=DISABLED)
         while True:
             if self.msg:  # send
-                if self.msg.startswith('@PM['): # Check if its a PM
+                if self.msg.startswith('@PM['):  # Check if its a PM
                     split_msg = self.msg.split()
                     if split_msg[0].endswith(']'):
                         to = split_msg[0]
@@ -266,9 +271,15 @@ class ChatGUI:
                         }
                         PM_msg = json.dumps(PM_msg)
                         client_socket.send(PM_msg.encode('UTF-8'))
-                elif self.msg == MessageType.USERSLIST.name: # Check if its a User_list request
+                elif self.msg == MessageType.USERSLIST.name:  # Check if its a User_list request
                     User_req = {
                         "type": str(MessageType.USERSLIST.name)
+                    }
+                    PM_msg = json.dumps(User_req)
+                    client_socket.send(PM_msg.encode('UTF-8'))
+                elif self.msg == MessageType.GETLISTFILE.name:  # Check if its a File server request
+                    User_req = {
+                        "type": str(MessageType.GETLISTFILE.name)
                     }
                     PM_msg = json.dumps(User_req)
                     client_socket.send(PM_msg.encode('UTF-8'))
@@ -285,4 +296,3 @@ class ChatGUI:
 
 g = ChatGUI()
 client_socket.close()
-

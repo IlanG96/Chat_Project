@@ -1,3 +1,4 @@
+import os
 import socket, select
 import json
 from enum import Enum, auto
@@ -69,21 +70,31 @@ def message_received(C_socket):
                 message = json.dumps(message)
                 broadcast(message.encode('UTF-8'))
                 return True
-            elif message_type == MessageType.Privatemsg.name: #send a private msg
+            elif message_type == MessageType.Privatemsg.name:  # send a private msg
                 message = {'type': str(MessageType.Privatemsg.name),
                            "msg": "PM-" + message_dict['username'] + ":" + message_dict['msg']}
                 message = json.dumps(message)
                 PM(C_socket, message_dict['recipient'], message.encode('UTF-8'))
                 return True
-            elif message_type == MessageType.USERSLIST.name: # if there's a user list request
-                users = 'Users Online:\n'
+            elif message_type == MessageType.USERSLIST.name:  # if there's a user list request
+                users = '----Users Online:-----\n'
                 for i in users_List.values():
                     users += i + '\n'
+                users += '-----------------------\n'
                 message = {"type": str(MessageType.USERSLIST.name),
                            "msg": users}
                 message = json.dumps(message)
                 PM(C_socket, users_List[C_socket], message.encode('UTF-8'))
-
+            elif message_type == MessageType.GETLISTFILE.name:
+                file_list = os.listdir("ServerFiles")
+                files = "----Server Files----\n"
+                for file in file_list:
+                    files += file + "\n"
+                files += '-----------------------\n'
+                message = {"type": str(MessageType.GETLISTFILE.name),
+                           "msg": files}
+                message = json.dumps(message)
+                PM(C_socket, users_List[C_socket], message.encode('UTF-8'))
         except Exception as e:
             print(e)
 
@@ -106,9 +117,14 @@ while True:
         else:  # If someone is already connected
             message = message_received(sock)
             if message is False:
-                print("Connection closed from " + users_List[sock].decode('UTF-8'))
+                print("Connection closed from " + users_List[sock])
+                user_left = users_List[sock]
                 socket_List.remove(sock)
                 del users_List[sock]
+                left_msg = {"type": str(MessageType.CONNECT.name),
+                            "msg": user_left + "has left the chat"}
+                left_msg = json.dumps(left_msg)
+                broadcast(left_msg.encode('UTF-8'))
                 continue
 
 server_socket.close()
