@@ -98,8 +98,10 @@ def message_received(C_socket):
                 message = {"type": str(MessageType.GETLISTFILE.name),
                            "msg": files}
                 message = json.dumps(message)
-                PM(C_socket, users_List[C_socket], message.encode('UTF-8')
-            # elif message_type==MessageType.DOWNLOAD.name:
+                PM(C_socket, users_List[C_socket], message.encode('UTF-8'))
+            elif message_type==MessageType.DOWNLOAD.name:
+                UDP_file_sender(message_dict['msg'],C_socket,C_address)
+
 
 
         except Exception as e:
