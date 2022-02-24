@@ -1,8 +1,10 @@
 import os
 import socket, select
 import json
-from enum import Enum, auto
-
+from enum import Enum
+# os- provides functions for interacting with the operating system
+# socket -way of connecting two nodes on a network to communicate with each other
+# select - a direct interface to the underlying operating system implementation
 
 class MessageType(Enum):
     CONNECT = 'connect'
@@ -19,18 +21,20 @@ server_ip = '127.0.0.1'  # server IP
 server_port = 55000  # Port
 socket_List = []  # socket list of the server
 users_List = {}
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)#s = socket(domain(AF_INET-Internet domain), type, protocol)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind((server_ip, server_port))
 server_socket.listen(5)
 socket_List.append(server_socket)
 
 
+# method to send a message to all the clients together
 def broadcast(message):
     for clients in users_List:
         clients.send(message)
 
 
+# (sock, recv, message)- sock - socket of the sender , recv - the recipient ..
 def PM(sock, recv, message):
     found = False
     sock.send(message)  # show the message to the sender
@@ -94,7 +98,10 @@ def message_received(C_socket):
                 message = {"type": str(MessageType.GETLISTFILE.name),
                            "msg": files}
                 message = json.dumps(message)
-                PM(C_socket, users_List[C_socket], message.encode('UTF-8'))
+                PM(C_socket, users_List[C_socket], message.encode('UTF-8')
+            # elif message_type==MessageType.DOWNLOAD.name:
+
+
         except Exception as e:
             print(e)
 
@@ -122,7 +129,7 @@ while True:
                 socket_List.remove(sock)
                 del users_List[sock]
                 left_msg = {"type": str(MessageType.CONNECT.name),
-                            "msg": user_left + "has left the chat"}
+                            "msg": user_left + " has left the chat"}
                 left_msg = json.dumps(left_msg)
                 broadcast(left_msg.encode('UTF-8'))
                 continue

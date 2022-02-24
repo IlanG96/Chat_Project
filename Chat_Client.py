@@ -62,7 +62,8 @@ class ChatGUI:
         self.username.place(relwidth=0.3,
                             relheight=0.10,
                             relx=0.35,
-                            rely=0.2)
+                            rely=0.2,
+                            )
 
         # set the focus of the cursor
         # self.username.focus()
@@ -97,64 +98,80 @@ class ChatGUI:
         HeadFont = tkFont.Font(family="Arial", size=16, weight="bold", slant="italic")
         ChatFont = tkFont.Font(family="Arial", size=14)
         SendFont = tkFont.Font(family="Arial", size=10, weight="bold")
-        self.Chat_Window.configure(bg="#6173A4")
+        img = PhotoImage(file="background.png")
+        self.Chat_Window.config(bg='LightSkyBlue2')#bg='LightSkyBlue2'
         self.name = name
         # to show chat window
+        img = PhotoImage(file="background.png")
         self.Chat_Window.deiconify()
         self.Chat_Window.title("CHATROOM")
         self.Chat_Window.resizable(width=True,
                                    height=True)
-        # self.Chat_Window.configure(width=600,
-        #                            height=800,
-        #                            bg="#6173A4")
+
         self.Chat_Window.geometry("800x600")
         self.user_option_label = Label(self.Chat_Window,
-                                       bg="#6173A4")
+                                       bg='LightSkyBlue2')  # bg="#6173A4"
         self.user_option_label.pack(side=RIGHT)
         self.labelHead = Label(self.Chat_Window,
-                               bg="#9DA7C5",
+                               bg='LightSkyBlue2',
                                text="Username:" + self.name,
                                font=HeadFont,
                                pady=3)
 
         self.labelHead.place(relwidth=1)
-        self.line = Label(self.Chat_Window,
-                          width=450,
-                          bg="#ABB2B9")
-
-        self.line.place(relwidth=1,
-                        rely=0.07,
-                        relheight=0.012)
 
         self.Chat_log = Text(self.Chat_Window,
                              width=20,
                              height=2,
-                             bg="#6173A4",
+                             bg='LightSkyBlue2',
                              font=ChatFont,
                              padx=3,
                              pady=3)
 
-        self.Chat_log.place(relheight=0.745,
+        self.Chat_log.place(relheight=0.650,
                             relwidth=0.8,
                             rely=0.08)
 
         self.labelBottom = Label(self.Chat_Window,
-                                 bg="#ABB2B9",
-                                 height=80)
+                                 bg='LightSkyBlue2',
+                                 height=110,
+                                 width=80)
+
+        self.file = Label(self.Chat_Window,
+                          bg='LightSkyBlue2',
+                          text="name:",
+                          anchor=W,
+                          font=ChatFont,
+                          height=110,
+                          width=80)
+
+        self.file.place(relwidth=1,
+                        relheight=0.08,
+                        rely=0.820)
+
+        self.file_box = Entry(self.file,
+                              bg='light grey',
+                              font=ChatFont)
 
         self.labelBottom.place(relwidth=1,
-                               rely=0.825)
+                               relheight=0.08,
+                               rely=0.900)
+
+        self.file_box.place(relwidth=0.30,
+                            relheight=0.8,
+                            rely=0.020,
+                            relx=0.08)
 
         self.Msg_box = Entry(self.labelBottom,
-                             bg="#6173A4",
+                             bg='light grey',
                              font=ChatFont)
 
         # place the given widget
         # into the gui window
         self.Msg_box.place(relwidth=0.74,
-                           relheight=0.06,
+                           relheight=0.9,
                            rely=0.008,
-                           relx=0.011)
+                           relx=0.004)
 
         self.Msg_box.focus()
 
@@ -163,19 +180,32 @@ class ChatGUI:
                                 text="Send",
                                 font=SendFont,
                                 width=20,
-                                bg="#ABB2B9",
-                                command=lambda: self.sendButton(self.Msg_box.get()))
+                                bg='SlateGray4',
+                                command=lambda: self.sendButton(self.file_box.get()))
 
         self.buttonMsg.place(relx=0.77,
                              rely=0.008,
-                             relheight=0.06,
+                             relheight=0.7,
                              relwidth=0.22)
+
+        self.file_button = Button(self.file,
+                                  text="download",
+                                  font=SendFont,
+                                  width=20,
+                                  bg='SlateGray4',
+                                  command=lambda: self.download_Button(self.Msg_box.get()))
+
+        self.file_button.place(relx=0.40,
+                               rely=0.40,
+                               anchor=W,
+                               relheight=0.7,
+                               relwidth=0.22)
 
         self.UserList = Button(self.user_option_label,
                                text="User List",
                                font=SendFont,
                                width=15,
-                               bg="#ABB2B9",
+                               bg='SlateGray4',
                                pady=10,
                                command=lambda: self.userList_serverList_button(0))
         self.UserList.pack(padx=3, pady=3)
@@ -183,7 +213,7 @@ class ChatGUI:
                                    text="Show ServerFiles",
                                    font=SendFont,
                                    width=15,
-                                   bg="#ABB2B9",
+                                   bg='SlateGray4',
                                    pady=10,
                                    command=lambda: self.userList_serverList_button(1))
         self.Server_files.pack(padx=3, pady=3)
@@ -192,10 +222,10 @@ class ChatGUI:
 
         # place the scroll bar
         # into the gui window
-        scrollbar.place(relheight=1,
-                        relx=0.974)
+        scrollbar.pack(side=RIGHT, fill=Y)#.place(relheight=1,
+        #                 relx=0.974)
 
-        scrollbar.config(command=self.Chat_log.yview)
+        scrollbar.config(command=self.Chat_log.yview,bg='SlateGray4',activebackground='SlateGray4')
 
         self.Chat_log.config(state=DISABLED)
 
@@ -215,6 +245,14 @@ class ChatGUI:
         self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
         self.msg = str(msg)
         self.Msg_box.delete(0, END)
+        send_thread = thread.Thread(target=self.send_msg)
+        send_thread.start()
+
+    def download_Button(self, msg):
+        # get a msg that was entered in the text box and send her
+        self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
+        self.msg = "+"+str(msg)
+        self.file_box.delete(0, END)
         send_thread = thread.Thread(target=self.send_msg)
         send_thread.start()
 
@@ -283,6 +321,12 @@ class ChatGUI:
                     }
                     PM_msg = json.dumps(User_req)
                     client_socket.send(PM_msg.encode('UTF-8'))
+                elif self.msg.startswith('+'):
+                    file_name = self.msg[1:]
+                    msg = {"type": str(MessageType.DOWNLOAD.name),
+                           "msg":file_name}
+                    down_msg = json.dumps(msg)
+                    client_socket.send(down_msg.encode('UTF-8'))
                 else:
                     send_msg = {
                         "type": str(MessageType['Publicmsg'].name),
