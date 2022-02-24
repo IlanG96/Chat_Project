@@ -2,9 +2,33 @@ import os
 import socket, select
 import json
 from enum import Enum
+
+
 # os- provides functions for interacting with the operating system
 # socket -way of connecting two nodes on a network to communicate with each other
 # select - a direct interface to the underlying operating system implementation
+
+def checksum(data):  # Form the standard IP-suite checksum
+    pos = len(data)
+    if (pos & 1):  # If odd...
+        pos -= 1
+        sum = ord(data[pos])  # Prime the sum with the odd end byte
+    else:
+        sum = 0
+
+    # Main code: loop to calculate the checksum
+    while pos > 0:
+        pos -= 2
+        sum += (ord(data[pos + 1]) << 8) + ord(data[pos])
+
+    sum = (sum >> 16) + (sum & 0xffff)
+    sum += (sum >> 16)
+
+    result = (~ sum) & 0xffff  # Keep lower 16 bits
+    result = result >> 8 | ((result & 0xff) << 8)  # Swap bytes
+    c = chr(result / 256) + chr(result % 256)
+    return chr(result / 256) + chr(result % 256)
+
 
 class MessageType(Enum):
     CONNECT = 'connect'
@@ -21,7 +45,8 @@ server_ip = '127.0.0.1'  # server IP
 server_port = 55000  # Port
 socket_List = []  # socket list of the server
 users_List = {}
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)#s = socket(domain(AF_INET-Internet domain), type, protocol)
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
+                              0)  # s = socket(domain(AF_INET-Internet domain), type, protocol)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind((server_ip, server_port))
 server_socket.listen(5)
@@ -51,7 +76,48 @@ def PM(sock, recv, message):
         sock.send(err.encode('UTF-8'))
 
 
-def message_received(C_socket):
+def UDP_file_sender(filename, C_socket):
+    send_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    recv_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    send_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    recv_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    UDP_port = 55500
+    UDP_dic = {
+        "type": MessageType.DOWNLOAD.name,
+        "msg": UDP_port
+    }
+    UDP_dic = json.dumps(UDP_dic)
+    C_socket.send(UDP_dic.encode('UTF-8'))
+    recv_UDP_sock.bind((server_ip, UDP_port))
+    connection = recv_UDP_sock.recvfrom(2048)
+    try:
+        with open("ServerFiles/" + filename) as file:
+            data = file.read()
+    except Exception as e:
+        print("Fail", str(e))
+    seq_num = 0
+    each_seg_size = 50  # size of each seg
+    total_segment_size = 0
+    while total_segment_size < len(data):
+        if (total_segment_size + each_seg_size > len(data)):
+            segment = data[total_segment_size:]
+        else:
+            segment = data[total_segment_size:total_segment_size + each_seg_size]
+        total_segment_size += each_seg_size
+
+        ack_recv = False
+        while not ack_recv:
+            c = checksum(segment)
+            msg = {
+                "checksum": checksum(segment),
+                "id": str(seq_num),
+                "data": str(segment),
+                "filename": filename
+            }
+            send_UDP_sock.send(msg, connection[1])
+
+
+def message_received(C_socket, C_address):
     try:
         message_dict = C_socket.recv(2048)
         message_dict = json.loads(message_dict)
@@ -99,8 +165,8 @@ def message_received(C_socket):
                            "msg": files}
                 message = json.dumps(message)
                 PM(C_socket, users_List[C_socket], message.encode('UTF-8'))
-            elif message_type==MessageType.DOWNLOAD.name:
-                UDP_file_sender(message_dict['msg'],C_socket,C_address)
+            elif message_type == MessageType.DOWNLOAD.name:
+                UDP_file_sender(message_dict['msg'], C_socket)
 
 
 
@@ -119,12 +185,12 @@ while True:
     for sock in ready_to_read:
         if sock == server_socket:  # if a user just connected to the server
             C_socket, C_address = server_socket.accept()
-            message_received(C_socket)
+            message_received(C_socket, C_address)
             print(
                 "You are connected from:" + str((C_address[0])) + ":" + str(C_address[1]) + " your user name is: " +
                 users_List[C_socket])
         else:  # If someone is already connected
-            message = message_received(sock)
+            message = message_received(sock, C_address)
             if message is False:
                 print("Connection closed from " + users_List[sock])
                 user_left = users_List[sock]

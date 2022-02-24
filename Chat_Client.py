@@ -8,6 +8,25 @@ from tkinter import *
 import tkinter.font as tkFont
 from enum import Enum
 
+def checksum(data):  # Form the standard IP-suite checksum
+    pos = len(data)
+    if (pos & 1):  # If odd...
+        pos -= 1
+        sum = ord(data[pos])  # Prime the sum with the odd end byte
+    else:
+        sum = 0
+
+    #Main code: loop to calculate the checksum
+    while pos > 0:
+        pos -= 2
+        sum += (ord(data[pos + 1]) << 8) + ord(data[pos])
+
+    sum = (sum >> 16) + (sum & 0xffff)
+    sum += (sum >> 16)
+
+    result = (~ sum) & 0xffff  # Keep lower 16 bits
+    result = result >> 8 | ((result & 0xff) << 8)  # Swap bytes
+    return chr(result / 256) + chr(result % 256)
 
 class MessageType(Enum):
     CONNECT = 'connect'
@@ -18,11 +37,13 @@ class MessageType(Enum):
     GETLISTFILE = 'get_list_file'
     DOWNLOAD = 'download'
     PROCEED = 'proceed'
+    ACK = 'Acknowledgement '
 
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 port = 55000
-client_socket.connect(('127.0.0.1', port))
+server_ip = '127.0.0.1'  # server IP
+client_socket.connect((server_ip, port))
 
 
 class ChatGUI:
@@ -99,7 +120,7 @@ class ChatGUI:
         ChatFont = tkFont.Font(family="Arial", size=14)
         SendFont = tkFont.Font(family="Arial", size=10, weight="bold")
         img = PhotoImage(file="background.png")
-        self.Chat_Window.config(bg='LightSkyBlue2')#bg='LightSkyBlue2'
+        self.Chat_Window.config(bg='LightSkyBlue2')  # bg='LightSkyBlue2'
         self.name = name
         # to show chat window
         img = PhotoImage(file="background.png")
@@ -181,7 +202,7 @@ class ChatGUI:
                                 font=SendFont,
                                 width=20,
                                 bg='SlateGray4',
-                                command=lambda: self.sendButton(self.file_box.get()))
+                                command=lambda: self.sendButton(self.Msg_box.get()))
 
         self.buttonMsg.place(relx=0.77,
                              rely=0.008,
@@ -193,7 +214,7 @@ class ChatGUI:
                                   font=SendFont,
                                   width=20,
                                   bg='SlateGray4',
-                                  command=lambda: self.download_Button(self.Msg_box.get()))
+                                  command=lambda: self.download_Button(self.file_box.get()))
 
         self.file_button.place(relx=0.40,
                                rely=0.40,
@@ -222,10 +243,10 @@ class ChatGUI:
 
         # place the scroll bar
         # into the gui window
-        scrollbar.pack(side=RIGHT, fill=Y)#.place(relheight=1,
+        scrollbar.pack(side=RIGHT, fill=Y)  # .place(relheight=1,
         #                 relx=0.974)
 
-        scrollbar.config(command=self.Chat_log.yview,bg='SlateGray4',activebackground='SlateGray4')
+        scrollbar.config(command=self.Chat_log.yview, bg='SlateGray4', activebackground='SlateGray4')
 
         self.Chat_log.config(state=DISABLED)
 
@@ -251,10 +272,46 @@ class ChatGUI:
     def download_Button(self, msg):
         # get a msg that was entered in the text box and send her
         self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
-        self.msg = "+"+str(msg)
+        self.msg = "+" + str(msg)
         self.file_box.delete(0, END)
         send_thread = thread.Thread(target=self.send_msg)
         send_thread.start()
+
+    def download_file(self, server_port):
+        UDPClientSocket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        UDPClientSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        dest=(server_ip, server_port)
+        UDPClientSocket.bind(dest)
+        connection=("Connected")
+        UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
+        expection_seq = 0
+        while True:
+            msg,address = UDPClientSocket.recvfrom(1024)
+            check_sum=msg["checksum"]
+            seq=msg["id"]
+            data=msg["data"]
+            with open(msg["filename",'ab']) as file:
+                if checksum(data) == check_sum:
+                    msg={
+                        "type":MessageType.ACK.name,
+                        "msg":"ACK" + seq ,
+                        "checksum":checksum("ACK" + seq)
+                    }
+                    msg=json.dumps(msg)
+                    UDPClientSocket.sendto(msg, dest)
+                    file.write(data)
+                if seq == str(expection_seq):
+                    expecting_seq = 1 - expecting_seq
+                else:
+                    negative_seq = str(1 - expecting_seq)
+                    msg={
+                        "type":MessageType.ACK.name,
+                        "msg":"neg" + negative_seq ,
+                        "checksum":checksum("ACK" + seq)
+                    }
+                    msg = json.dumps(msg)
+                    UDPClientSocket.sendto(msg,dest)
+                #UDPClientSocket.sendto(msg,dest)
 
     def recieve_msg(self):
         self.Chat_log.config(state=NORMAL)  # Allow to change the chat log when a new msg arrive
@@ -271,7 +328,9 @@ class ChatGUI:
                     sys.exit()
                 # username_length = int(username_header.decode('UTF-8'))
                 msg_type = meg_recv['type']
-                # if msg_type == MessageType.CONNECT.name:
+                if msg_type == MessageType.DOWNLOAD.name:
+                    server_port = meg_recv['msg']
+                    self.download_file(server_port)
                 self.Chat_log.config(state=NORMAL)
                 self.Chat_log.insert(END,
                                      meg_recv['msg'] + "\n")
@@ -324,7 +383,7 @@ class ChatGUI:
                 elif self.msg.startswith('+'):
                     file_name = self.msg[1:]
                     msg = {"type": str(MessageType.DOWNLOAD.name),
-                           "msg":file_name}
+                           "msg": file_name}
                     down_msg = json.dumps(msg)
                     client_socket.send(down_msg.encode('UTF-8'))
                 else:
