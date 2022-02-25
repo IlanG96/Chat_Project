@@ -77,11 +77,11 @@ def PM(sock, recv, message):
 
 
 def UDP_file_sender(filename, C_socket):
-    send_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # send_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     recv_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    send_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    recv_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    UDP_port = 55500
+    # send_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # recv_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    UDP_port = 55577
     UDP_dic = {
         "type": MessageType.DOWNLOAD.name,
         "msg": UDP_port
@@ -91,8 +91,8 @@ def UDP_file_sender(filename, C_socket):
     recv_UDP_sock.bind((server_ip, UDP_port))
     connection = recv_UDP_sock.recvfrom(2048)
     try:
-        with open("ServerFiles/" + filename) as file:
-            data = file.read()
+        with open("ServerFiles/" + filename,"rb") as file:
+            data = file.read() # as bytes!
     except Exception as e:
         print("Fail", str(e))
     seq_num = 0
@@ -107,14 +107,16 @@ def UDP_file_sender(filename, C_socket):
 
         ack_recv = False
         while not ack_recv:
-            c = checksum(segment)
+            segment_as_str=segment.decode("utf-8")
             msg = {
-                "checksum": checksum(segment),
+                "checksum": str(checksum(segment_as_str)),
                 "id": str(seq_num),
-                "data": str(segment),
-                "filename": filename
+                "data": segment_as_str,
+                "filename": str(filename)
             }
-            send_UDP_sock.send(msg, connection[1])
+            msg=json.dumps(msg)
+            recv_UDP_sock.sendto(msg.encode('UTF-8'), connection[1])
+            # send_UDP_sock.sendto(msg.encode('UTF-8'), connection[1])
 
 
 def message_received(C_socket, C_address):

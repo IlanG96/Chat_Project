@@ -8,25 +8,24 @@ from tkinter import *
 import tkinter.font as tkFont
 from enum import Enum
 
-def checksum(data):  # Form the standard IP-suite checksum
-    pos = len(data)
-    if (pos & 1):  # If odd...
-        pos -= 1
-        sum = ord(data[pos])  # Prime the sum with the odd end byte
-    else:
-        sum = 0
 
-    #Main code: loop to calculate the checksum
-    while pos > 0:
-        pos -= 2
-        sum += (ord(data[pos + 1]) << 8) + ord(data[pos])
+def checksum(buffer):
+    nleft = len(buffer)
+    sum = 0
+    pos = 0
+    while nleft > 1:
+        sum = ord(buffer[pos]) * 256 + (ord(buffer[pos + 1]) + sum)
+        pos = pos + 2
+        nleft = nleft - 2
+    if nleft == 1:
+        sum = sum + ord(buffer[pos]) * 256
 
-    sum = (sum >> 16) + (sum & 0xffff)
+    sum = (sum >> 16) + (sum & 0xFFFF)
     sum += (sum >> 16)
+    sum = (~sum & 0xFFFF)
 
-    result = (~ sum) & 0xffff  # Keep lower 16 bits
-    result = result >> 8 | ((result & 0xff) << 8)  # Swap bytes
-    return chr(result / 256) + chr(result % 256)
+    return sum
+
 
 class MessageType(Enum):
     CONNECT = 'connect'
@@ -278,40 +277,48 @@ class ChatGUI:
         send_thread.start()
 
     def download_file(self, server_port):
-        UDPClientSocket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        UDPClientSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        dest=(server_ip, server_port)
-        UDPClientSocket.bind(dest)
-        connection=("Connected")
-        UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
+        UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #UDPClientSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        dest = (server_ip, server_port)
+        #UDPClientSocket.bind(dest)
+        connection = "Connected"
+        UDPClientSocket.sendto(connection.encode('UTF-8'), dest)
         expection_seq = 0
         while True:
-            msg,address = UDPClientSocket.recvfrom(1024)
-            check_sum=msg["checksum"]
-            seq=msg["id"]
-            data=msg["data"]
-            with open(msg["filename",'ab']) as file:
-                if checksum(data) == check_sum:
-                    msg={
-                        "type":MessageType.ACK.name,
-                        "msg":"ACK" + seq ,
-                        "checksum":checksum("ACK" + seq)
-                    }
-                    msg=json.dumps(msg)
-                    UDPClientSocket.sendto(msg, dest)
-                    file.write(data)
-                if seq == str(expection_seq):
-                    expecting_seq = 1 - expecting_seq
-                else:
-                    negative_seq = str(1 - expecting_seq)
-                    msg={
-                        "type":MessageType.ACK.name,
-                        "msg":"neg" + negative_seq ,
-                        "checksum":checksum("ACK" + seq)
+            try:
+                msg, address = UDPClientSocket.recvfrom(1024)
+                msg=json.loads(msg)
+            except Exception as e:
+                print("Timeout")
+
+            # msg,address = UDPClientSocket.recvfrom(1024)
+            check_sum = msg["checksum"]
+            seq = msg["id"]
+            data_as_bytes = msg["data"].encode("utf-8")
+            data_as_str=msg["data"]
+            with open(msg["filename"], 'ab') as file:
+
+                if str(checksum(data_as_str)) == check_sum:
+                    msg = {
+                        "type": MessageType.ACK.name,
+                        "msg": "ACK" + seq,
+                        "checksum": checksum("ACK" + seq)
                     }
                     msg = json.dumps(msg)
-                    UDPClientSocket.sendto(msg,dest)
-                #UDPClientSocket.sendto(msg,dest)
+                    UDPClientSocket.sendto(msg.encode('UTF-8'), dest)
+                    file.write(data_as_bytes)
+                if seq == str(expection_seq):
+                    expection_seq = 1 - expection_seq
+                else:
+                    negative_seq = str(1 - expection_seq)
+                    msg = {
+                        "type": MessageType.ACK.name,
+                        "msg": "neg" + negative_seq,
+                        "checksum": checksum("ACK" + seq)
+                    }
+                    msg = json.dumps(msg)
+                    UDPClientSocket.sendto(msg.encode('UTF-8'), dest)
+                # UDPClientSocket.sendto(msg,dest)
 
     def recieve_msg(self):
         self.Chat_log.config(state=NORMAL)  # Allow to change the chat log when a new msg arrive
