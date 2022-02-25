@@ -282,12 +282,12 @@ class ChatGUI:
         dest = (server_ip, server_port)
         #UDPClientSocket.bind(dest)
         connection = "Connected"
-        UDPClientSocket.sendto(connection.encode('UTF-8'), dest)
+        UDPClientSocket.sendto(connection.encode('UTF-8'), dest) # send a connected msg to the server so the server will have the client ip and port
         expection_seq = 0
         while True:
-            try:
+            try:  #get the msg from the server
                 msg, address = UDPClientSocket.recvfrom(1024)
-                msg=json.loads(msg)
+                msg=json.loads(msg) #return the msg as a dict
             except Exception as e:
                 print("Timeout")
 
@@ -298,7 +298,7 @@ class ChatGUI:
             data_as_str=msg["data"]
             with open(msg["filename"], 'ab') as file:
 
-                if str(checksum(data_as_str)) == check_sum:
+                if str(checksum(data_as_str)) == check_sum:  #if the check sum is the same then send an ACK you recieved all the data
                     msg = {
                         "type": MessageType.ACK.name,
                         "msg": "ACK" + seq,
@@ -306,7 +306,7 @@ class ChatGUI:
                     }
                     msg = json.dumps(msg)
                     UDPClientSocket.sendto(msg.encode('UTF-8'), dest)
-                    file.write(data_as_bytes)
+                    file.write(data_as_bytes) # write the data you recieved in the file you opened
                 if seq == str(expection_seq):
                     expection_seq = 1 - expection_seq
                 else:

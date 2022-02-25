@@ -91,8 +91,8 @@ def UDP_file_sender(filename, C_socket):
     recv_UDP_sock.bind((server_ip, UDP_port))
     connection = recv_UDP_sock.recvfrom(2048)
     try:
-        with open("ServerFiles/" + filename,"rb") as file:
-            data = file.read() # as bytes!
+        with open("ServerFiles/" + filename, "rb") as file:  # open the file the client want
+            data = file.read()  # as bytes!
     except Exception as e:
         print("Fail", str(e))
     seq_num = 0
@@ -107,15 +107,16 @@ def UDP_file_sender(filename, C_socket):
 
         ack_recv = False
         while not ack_recv:
-            segment_as_str=segment.decode("utf-8")
+            segment_as_str = segment.decode("utf-8")  # need to send a data as a str (cant json a byte object)
             msg = {
                 "checksum": str(checksum(segment_as_str)),
                 "id": str(seq_num),
                 "data": segment_as_str,
                 "filename": str(filename)
             }
-            msg=json.dumps(msg)
-            recv_UDP_sock.sendto(msg.encode('UTF-8'), connection[1])
+            msg = json.dumps(msg)
+            recv_UDP_sock.sendto(msg.encode('UTF-8'), connection[
+                1])  # send the data to the client (connection[1] is the IP and port of the client)
             # send_UDP_sock.sendto(msg.encode('UTF-8'), connection[1])
 
 
