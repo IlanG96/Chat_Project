@@ -2,6 +2,8 @@ import os
 import socket, select
 import json
 from enum import Enum
+import threading as thread
+import base64
 
 
 # os- provides functions for interacting with the operating system
@@ -96,28 +98,47 @@ def UDP_file_sender(filename, C_socket):
     except Exception as e:
         print("Fail", str(e))
     seq_num = 0
-    each_seg_size = 50  # size of each seg
+    each_seg_size = 125  # size of each seg
     total_segment_size = 0
+    all_segments= {}
     while total_segment_size < len(data):
-        if (total_segment_size + each_seg_size > len(data)):
+        if total_segment_size + each_seg_size > len(data):
             segment = data[total_segment_size:]
         else:
             segment = data[total_segment_size:total_segment_size + each_seg_size]
+        seq_num+=1
+        all_segments[seq_num]=segment
         total_segment_size += each_seg_size
 
+    for seg_id,seg in all_segments.items():
         ack_recv = False
         while not ack_recv:
-            segment_as_str = segment.decode("utf-8")  # need to send a data as a str (cant json a byte object)
+            segment_as_str = base64.b64encode(seg).decode('UTF-8') # need to send a data as a str (cant json a byte object)
             msg = {
                 "checksum": str(checksum(segment_as_str)),
-                "id": str(seq_num),
+                "id": str(seg_id),
                 "data": segment_as_str,
                 "filename": str(filename)
             }
             msg = json.dumps(msg)
             recv_UDP_sock.sendto(msg.encode('UTF-8'), connection[
                 1])  # send the data to the client (connection[1] is the IP and port of the client)
-            # send_UDP_sock.sendto(msg.encode('UTF-8'), connection[1])
+
+            try:
+                msg, address = recv_UDP_sock.recvfrom(2048)
+            except socket.timeout:
+                print("Time out")
+            else:
+                msg = json.loads(msg)
+                print(msg)
+                check_sum = msg["checksum"]
+                ack_id = msg["id"]
+                ack = msg["msg"]
+                if checksum(ack) == check_sum and ack_id == str(seg_id):
+                    ack_recv = True
+                if ack.startswith("neg"):
+                    ack_recv = False
+        #seq_num = 1 - seq_num
 
 
 def message_received(C_socket, C_address):
@@ -169,7 +190,8 @@ def message_received(C_socket, C_address):
                 message = json.dumps(message)
                 PM(C_socket, users_List[C_socket], message.encode('UTF-8'))
             elif message_type == MessageType.DOWNLOAD.name:
-                UDP_file_sender(message_dict['msg'], C_socket)
+                down_thread = thread.Thread(target=UDP_file_sender(message_dict['msg'], C_socket))
+                down_thread.start()
 
 
 

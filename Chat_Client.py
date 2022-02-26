@@ -1,3 +1,4 @@
+import base64
 import json
 import socket
 import select
@@ -278,42 +279,43 @@ class ChatGUI:
 
     def download_file(self, server_port):
         UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        #UDPClientSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         dest = (server_ip, server_port)
-        #UDPClientSocket.bind(dest)
         connection = "Connected"
-        UDPClientSocket.sendto(connection.encode('UTF-8'), dest) # send a connected msg to the server so the server will have the client ip and port
+        # send a connected msg to the server so the server will have the client ip and port
+        UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
         expection_seq = 0
         while True:
-            try:  #get the msg from the server
+            try:  # get the msg from the server
                 msg, address = UDPClientSocket.recvfrom(1024)
-                msg=json.loads(msg) #return the msg as a dict
+                msg = json.loads(msg)  # return the msg as a dict
             except Exception as e:
                 print("Timeout")
 
             # msg,address = UDPClientSocket.recvfrom(1024)
             check_sum = msg["checksum"]
             seq = msg["id"]
-            data_as_bytes = msg["data"].encode("utf-8")
-            data_as_str=msg["data"]
+            data_as_bytes = base64.b64decode(msg["data"].encode('UTF-8')) #recieve the data for the file
+            data_as_str = msg["data"]
             with open(msg["filename"], 'ab') as file:
 
-                if str(checksum(data_as_str)) == check_sum:  #if the check sum is the same then send an ACK you recieved all the data
+                if str(checksum(
+                        data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
                     msg = {
                         "type": MessageType.ACK.name,
+                        "id": seq,
                         "msg": "ACK" + seq,
                         "checksum": checksum("ACK" + seq)
                     }
                     msg = json.dumps(msg)
                     UDPClientSocket.sendto(msg.encode('UTF-8'), dest)
-                    file.write(data_as_bytes) # write the data you recieved in the file you opened
-                if seq == str(expection_seq):
-                    expection_seq = 1 - expection_seq
+                    file.write(data_as_bytes)  # write the data you recieved in the file you opened
+                # if seq == str(expection_seq):
+                #     expection_seq = 1 - expection_seq
                 else:
                     negative_seq = str(1 - expection_seq)
                     msg = {
                         "type": MessageType.ACK.name,
-                        "msg": "neg" + negative_seq,
+                        "msg": "neg" + seq,
                         "checksum": checksum("ACK" + seq)
                     }
                     msg = json.dumps(msg)
@@ -337,7 +339,8 @@ class ChatGUI:
                 msg_type = meg_recv['type']
                 if msg_type == MessageType.DOWNLOAD.name:
                     server_port = meg_recv['msg']
-                    self.download_file(server_port)
+                    down_thread = thread.Thread(target=self.download_file(server_port))
+                    down_thread.start()
                 self.Chat_log.config(state=NORMAL)
                 self.Chat_log.insert(END,
                                      meg_recv['msg'] + "\n")
