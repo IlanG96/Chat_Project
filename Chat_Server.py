@@ -100,20 +100,21 @@ def UDP_file_sender(filename, C_socket):
     seq_num = 0
     each_seg_size = 125  # size of each seg
     total_segment_size = 0
-    all_segments= {}
+    all_segments = {}
     while total_segment_size < len(data):
         if total_segment_size + each_seg_size > len(data):
             segment = data[total_segment_size:]
         else:
             segment = data[total_segment_size:total_segment_size + each_seg_size]
-        seq_num+=1
-        all_segments[seq_num]=segment
+        seq_num += 1
+        all_segments[seq_num] = segment
         total_segment_size += each_seg_size
 
-    for seg_id,seg in all_segments.items():
+    for seg_id, seg in all_segments.items():
         ack_recv = False
         while not ack_recv:
-            segment_as_str = base64.b64encode(seg).decode('UTF-8') # need to send a data as a str (cant json a byte object)
+            segment_as_str = base64.b64encode(seg).decode(
+                'UTF-8')  # need to send a data as a str (cant json a byte object)
             msg = {
                 "checksum": str(checksum(segment_as_str)),
                 "id": str(seg_id),
@@ -138,7 +139,7 @@ def UDP_file_sender(filename, C_socket):
                     ack_recv = True
                 if ack.startswith("neg"):
                     ack_recv = False
-        #seq_num = 1 - seq_num
+        # seq_num = 1 - seq_num
 
 
 def message_received(C_socket, C_address):
@@ -192,7 +193,7 @@ def message_received(C_socket, C_address):
             elif message_type == MessageType.DOWNLOAD.name:
                 down_thread = thread.Thread(target=UDP_file_sender(message_dict['msg'], C_socket))
                 down_thread.start()
-
+                return True
 
 
         except Exception as e:

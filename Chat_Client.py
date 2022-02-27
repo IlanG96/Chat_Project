@@ -8,6 +8,7 @@ import threading as thread
 from tkinter import *
 import tkinter.font as tkFont
 from enum import Enum
+import _thread
 
 
 def checksum(buffer):
@@ -111,8 +112,9 @@ class ChatGUI:
         client_socket.send(user_connect.encode('UTF-8'))
         self.login.destroy()
         self.ChatRoom_Gui(UserName)
-        recieve_thread = thread.Thread(target=self.recieve_msg)
-        recieve_thread.start()
+        _thread.start_new_thread(self.recieve_msg,())
+        # recieve_thread = thread.Thread(target=self.recieve_msg)
+        # recieve_thread.start()
 
     # The main layout of the chat
     def ChatRoom_Gui(self, name):
@@ -257,8 +259,9 @@ class ChatGUI:
             self.msg = MessageType.USERSLIST.name
         else:
             self.msg = MessageType.GETLISTFILE.name
-        send_thread = thread.Thread(target=self.send_msg)
-        send_thread.start()
+        # send_thread = thread.Thread(target=self.send_msg)
+        # send_thread.start()
+        self.send_msg()
 
     # function to basically start the thread for sending messages
     def sendButton(self, msg):
@@ -266,16 +269,18 @@ class ChatGUI:
         self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
         self.msg = str(msg)
         self.Msg_box.delete(0, END)
-        send_thread = thread.Thread(target=self.send_msg)
-        send_thread.start()
+        # send_thread = thread.Thread(target=self.send_msg)
+        # send_thread.start()
+        self.send_msg()
 
     def download_Button(self, msg):
         # get a msg that was entered in the text box and send her
         self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
         self.msg = "+" + str(msg)
         self.file_box.delete(0, END)
-        send_thread = thread.Thread(target=self.send_msg)
-        send_thread.start()
+        # send_thread = thread.Thread(target=self.send_msg)
+        # send_thread.start()
+        self.send_msg()
 
     def download_file(self, server_port):
         UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
