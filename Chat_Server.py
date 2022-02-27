@@ -132,6 +132,7 @@ def UDP_file_sender(filename, C_socket):
             recv_UDP_sock.sendto(msg.encode('UTF-8'), connection[
                 1])  # send the data to the client (connection[1] is the IP and port of the client)
 
+            recv_UDP_sock.settimeout(0.001)
             try:
                 msg, address = recv_UDP_sock.recvfrom(2048)
             except socket.timeout:

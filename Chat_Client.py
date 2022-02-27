@@ -1,6 +1,8 @@
 import base64
 import json
 import socket
+from tkinter.ttk import Progressbar
+
 import select
 import errno
 import sys
@@ -135,6 +137,13 @@ class ChatGUI:
         self.user_option_label = Label(self.Chat_Window,
                                        bg='LightSkyBlue2')  # bg="#6173A4"
         self.user_option_label.pack(side=RIGHT)
+
+        self.progress = Progressbar(self.Chat_Window, orient=HORIZONTAL, length=100, mode='determinate')
+
+        self.progress.place(relheight=0.650,
+                            relwidth=0.8,
+                            rely=0.08)
+
         self.labelHead = Label(self.Chat_Window,
                                bg='LightSkyBlue2',
                                text="Username:" + self.name,
@@ -287,6 +296,7 @@ class ChatGUI:
         dest = (server_ip, server_port)
         connection = "Connected"
         segments_recv=[]
+        self.progress['value']=0
         # send a connected msg to the server so the server will have the client ip and port
         UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
         expection_seq = 0
@@ -315,6 +325,7 @@ class ChatGUI:
                     }
                     ack_msg = json.dumps(ack_msg)
                     UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
+                    self.progress['value']=(msg["length"] / (segment_counter+1))*100
                     segments_recv.append(data_as_bytes)
                     segment_counter+=1
                     if segment_counter == int(msg["length"]):
