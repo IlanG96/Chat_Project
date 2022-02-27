@@ -1,3 +1,4 @@
+import _thread
 import os
 import socket, select
 import json
@@ -10,26 +11,22 @@ import base64
 # socket -way of connecting two nodes on a network to communicate with each other
 # select - a direct interface to the underlying operating system implementation
 
-def checksum(data):  # Form the standard IP-suite checksum
-    pos = len(data)
-    if (pos & 1):  # If odd...
-        pos -= 1
-        sum = ord(data[pos])  # Prime the sum with the odd end byte
-    else:
-        sum = 0
+def checksum(buffer):
+    nleft = len(buffer)
+    sum = 0
+    pos = 0
+    while nleft > 1:
+        sum = ord(buffer[pos]) * 256 + (ord(buffer[pos + 1]) + sum)
+        pos = pos + 2
+        nleft = nleft - 2
+    if nleft == 1:
+        sum = sum + ord(buffer[pos]) * 256
 
-    # Main code: loop to calculate the checksum
-    while pos > 0:
-        pos -= 2
-        sum += (ord(data[pos + 1]) << 8) + ord(data[pos])
-
-    sum = (sum >> 16) + (sum & 0xffff)
+    sum = (sum >> 16) + (sum & 0xFFFF)
     sum += (sum >> 16)
+    sum = (~sum & 0xFFFF)
 
-    result = (~ sum) & 0xffff  # Keep lower 16 bits
-    result = result >> 8 | ((result & 0xff) << 8)  # Swap bytes
-    c = chr(result / 256) + chr(result % 256)
-    return chr(result / 256) + chr(result % 256)
+    return sum
 
 
 class MessageType(Enum):
@@ -79,18 +76,23 @@ def PM(sock, recv, message):
 
 
 def UDP_file_sender(filename, C_socket):
-    # send_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     recv_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # send_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # recv_UDP_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    UDP_port = 55577
+    UDP_port = 55001
+    isconnected = False
+    while not isconnected:
+        try:
+            recv_UDP_sock.bind((server_ip, UDP_port))
+            isconnected = True
+        except:
+            print("Bind failed")
+            UDP_port += 1
+
     UDP_dic = {
         "type": MessageType.DOWNLOAD.name,
         "msg": UDP_port
     }
     UDP_dic = json.dumps(UDP_dic)
     C_socket.send(UDP_dic.encode('UTF-8'))
-    recv_UDP_sock.bind((server_ip, UDP_port))
     connection = recv_UDP_sock.recvfrom(2048)
     try:
         with open("ServerFiles/" + filename, "rb") as file:  # open the file the client want
@@ -98,7 +100,7 @@ def UDP_file_sender(filename, C_socket):
     except Exception as e:
         print("Fail", str(e))
     seq_num = 0
-    each_seg_size = 125  # size of each seg
+    each_seg_size = 1000  # size of each seg
     total_segment_size = 0
     all_segments = {}
     while total_segment_size < len(data):
@@ -118,6 +120,7 @@ def UDP_file_sender(filename, C_socket):
             msg = {
                 "checksum": str(checksum(segment_as_str)),
                 "id": str(seg_id),
+                "length": len(all_segments) - 1,
                 "data": segment_as_str,
                 "filename": str(filename)
             }
@@ -191,18 +194,43 @@ def message_received(C_socket, C_address):
                 message = json.dumps(message)
                 PM(C_socket, users_List[C_socket], message.encode('UTF-8'))
             elif message_type == MessageType.DOWNLOAD.name:
-                down_thread = thread.Thread(target=UDP_file_sender(message_dict['msg'], C_socket))
-                down_thread.start()
+                _thread.start_new_thread(UDP_file_sender, (message_dict['msg'], C_socket))
+                # down_thread = thread.Thread(target=UDP_file_sender(message_dict['msg'], C_socket))
+                # down_thread.start()
                 return True
 
 
         except Exception as e:
             print(e)
+            print("Connection closed from " + users_List[sock])
+            user_left = users_List[sock]
+            socket_List.remove(sock)
+            del users_List[sock]
+            left_msg = {"type": str(MessageType.CONNECT.name),
+                        "msg": user_left + " has left the chat"}
+            left_msg = json.dumps(left_msg)
+            broadcast(left_msg.encode('UTF-8'))
 
         if not len(message_dict):
+            print("Connection closed from " + users_List[sock])
+            user_left = users_List[sock]
+            socket_List.remove(sock)
+            del users_List[sock]
+            left_msg = {"type": str(MessageType.CONNECT.name),
+                        "msg": user_left + " has left the chat"}
+            left_msg = json.dumps(left_msg)
+            broadcast(left_msg.encode('UTF-8'))
             return False
 
     except:
+        print("Connection closed from " + users_List[sock])
+        user_left = users_List[sock]
+        socket_List.remove(sock)
+        del users_List[sock]
+        left_msg = {"type": str(MessageType.CONNECT.name),
+                    "msg": user_left + " has left the chat"}
+        left_msg = json.dumps(left_msg)
+        broadcast(left_msg.encode('UTF-8'))
         return False
 
 
@@ -216,7 +244,8 @@ while True:
                 "You are connected from:" + str((C_address[0])) + ":" + str(C_address[1]) + " your user name is: " +
                 users_List[C_socket])
         else:  # If someone is already connected
-            message = message_received(sock, C_address)
+            # message = message_received(sock, C_address)
+            message = _thread.start_new_thread(message_received, (sock, C_address))
             if message is False:
                 print("Connection closed from " + users_List[sock])
                 user_left = users_List[sock]

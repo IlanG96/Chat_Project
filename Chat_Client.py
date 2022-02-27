@@ -289,9 +289,10 @@ class ChatGUI:
         # send a connected msg to the server so the server will have the client ip and port
         UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
         expection_seq = 0
+        segment_counter=0
         while True:
             try:  # get the msg from the server
-                msg, address = UDPClientSocket.recvfrom(1024)
+                msg, address = UDPClientSocket.recvfrom(2048)
                 msg = json.loads(msg)  # return the msg as a dict
             except Exception as e:
                 print("Timeout")
@@ -305,26 +306,29 @@ class ChatGUI:
 
                 if str(checksum(
                         data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
-                    msg = {
+                    ack_msg = {
                         "type": MessageType.ACK.name,
                         "id": seq,
                         "msg": "ACK" + seq,
                         "checksum": checksum("ACK" + seq)
                     }
-                    msg = json.dumps(msg)
-                    UDPClientSocket.sendto(msg.encode('UTF-8'), dest)
+                    ack_msg = json.dumps(ack_msg)
+                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
                     file.write(data_as_bytes)  # write the data you recieved in the file you opened
+                    segment_counter+=1
+                    if segment_counter == int(msg["length"]):
+                        break
                 # if seq == str(expection_seq):
                 #     expection_seq = 1 - expection_seq
                 else:
                     negative_seq = str(1 - expection_seq)
-                    msg = {
+                    ack_msg = {
                         "type": MessageType.ACK.name,
                         "msg": "neg" + seq,
                         "checksum": checksum("ACK" + seq)
                     }
-                    msg = json.dumps(msg)
-                    UDPClientSocket.sendto(msg.encode('UTF-8'), dest)
+                    ack_msg = json.dumps(ack_msg)
+                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
                 # UDPClientSocket.sendto(msg,dest)
 
     def recieve_msg(self):
@@ -344,12 +348,14 @@ class ChatGUI:
                 msg_type = meg_recv['type']
                 if msg_type == MessageType.DOWNLOAD.name:
                     server_port = meg_recv['msg']
-                    down_thread = thread.Thread(target=self.download_file(server_port))
-                    down_thread.start()
-                self.Chat_log.config(state=NORMAL)
-                self.Chat_log.insert(END,
+                    _thread.start_new_thread(self.download_file, (server_port, ))
+                    # down_thread = thread.Thread(target=self.download_file(server_port))
+                    # down_thread.start()
+                else:
+                    self.Chat_log.config(state=NORMAL)
+                    self.Chat_log.insert(END,
                                      meg_recv['msg'] + "\n")
-                self.Chat_log.config(state=DISABLED)
+                    self.Chat_log.config(state=DISABLED)
                 # elif msg_type == MessageType.Publicmsg.name or msg_type == MessageType.Privatemsg.name or msg_type == MessageType.USERSLIST.name:
                 #     self.Chat_log.config(state=NORMAL)
                 #     self.Chat_log.insert(END,
