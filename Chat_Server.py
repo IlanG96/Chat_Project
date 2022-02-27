@@ -98,6 +98,10 @@ def UDP_file_sender(filename, C_socket):
         with open("ServerFiles/" + filename, "rb") as file:  # open the file the client want
             data = file.read()  # as bytes!
     except Exception as e:
+        err_msg={"type":MessageType.Privatemsg.name,
+                 "msg": filename + "is not available in the server files!\n Try a different file name"}
+        err_msg=json.dumps(err_msg)
+        C_socket.send(err_msg.encode('UTF-8'))
         print("Fail", str(e))
     seq_num = 0
     each_seg_size = 1000  # size of each seg
@@ -120,7 +124,7 @@ def UDP_file_sender(filename, C_socket):
             msg = {
                 "checksum": str(checksum(segment_as_str)),
                 "id": str(seg_id),
-                "length": len(all_segments) - 1,
+                "length": len(all_segments),
                 "data": segment_as_str,
                 "filename": str(filename)
             }

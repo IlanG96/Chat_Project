@@ -286,6 +286,7 @@ class ChatGUI:
         UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         dest = (server_ip, server_port)
         connection = "Connected"
+        segments_recv=[]
         # send a connected msg to the server so the server will have the client ip and port
         UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
         expection_seq = 0
@@ -302,7 +303,7 @@ class ChatGUI:
             seq = msg["id"]
             data_as_bytes = base64.b64decode(msg["data"].encode('UTF-8')) #recieve the data for the file
             data_as_str = msg["data"]
-            with open(msg["filename"], 'ab') as file:
+            with open(msg["filename"], 'wb+') as file:
 
                 if str(checksum(
                         data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
@@ -314,9 +315,11 @@ class ChatGUI:
                     }
                     ack_msg = json.dumps(ack_msg)
                     UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
-                    file.write(data_as_bytes)  # write the data you recieved in the file you opened
+                    segments_recv.append(data_as_bytes)
                     segment_counter+=1
                     if segment_counter == int(msg["length"]):
+                        for data in segments_recv:
+                            file.write(data)  # write the data you recieved in the file you opened
                         break
                 # if seq == str(expection_seq):
                 #     expection_seq = 1 - expection_seq
