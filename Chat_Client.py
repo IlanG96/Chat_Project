@@ -1,6 +1,7 @@
 import base64
 import json
 import socket
+import time
 from tkinter.ttk import Progressbar
 
 import select
@@ -50,6 +51,163 @@ client_socket.connect((server_ip, port))
 
 
 class ChatGUI:
+
+    # If the user list button or the server files button is pressed send a Userlist msg request or server list msg
+    # request depends on the type that entered 0=Userlist 1=Server files
+    def userList_serverList_button(self, type: int):
+        if type == 0:
+            self.msg = MessageType.USERSLIST.name
+        else:
+            self.msg = MessageType.GETLISTFILE.name
+        # send_thread = thread.Thread(target=self.send_msg)
+        # send_thread.start()
+        self.send_msg()
+
+
+    # function to basically start the thread for sending messages
+    def sendButton(self, msg):
+        # get a msg that was entered in the text box and send her
+        self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
+        self.msg = str(msg)
+        self.Msg_box.delete(0, END)
+        self.send_msg()
+
+    def download_Button(self, msg):
+        # get a msg that was entered in the text box and send her
+        self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
+        self.msg = "+" + str(msg)
+        self.file_box.delete(0, END)
+        self.send_msg()
+
+    def download_file(self, server_port):
+        UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        dest = (server_ip, server_port)
+        connection = "Connected"
+        segments_recv=[]
+        self.progress['value']=0
+        # send a connected msg to the server so the server will have the client ip and port
+        UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
+        expection_seq = 0
+        segment_counter=0
+        while True:
+            try:  # get the msg from the server
+                msg, address = UDPClientSocket.recvfrom(2048)
+                msg = json.loads(msg)  # return the msg as a dict
+            except Exception as e:
+                print("Timeout")
+            check_sum = msg["checksum"]
+            seq = msg["id"]
+            data_as_bytes = base64.b64decode(msg["data"].encode('UTF-8')) #recieve the data for the file
+            data_as_str = msg["data"]
+            with open(msg["filename"], 'wb+') as file:
+
+                if str(checksum(
+                        data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
+                    ack_msg = {
+                        "type": MessageType.ACK.name,
+                        "id": seq,
+                        "msg": "ACK" + seq,
+                        "checksum": checksum("ACK" + seq)
+                    }
+                    ack_msg = json.dumps(ack_msg)
+                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
+                    self.progress['value']=((segment_counter+1) / msg["length"])*100
+                    segments_recv.append(data_as_bytes)
+                    segment_counter+=1
+                    if segment_counter == int(msg["length"]):
+                        for data in segments_recv:
+                            file.write(data)  # write the data you recieved in the file you opened
+                        break
+                else:
+                    negative_seq = str(1 - expection_seq)
+                    ack_msg = {
+                        "type": MessageType.ACK.name,
+                        "msg": "neg" + seq,
+                        "checksum": checksum("ACK" + seq)
+                    }
+                    ack_msg = json.dumps(ack_msg)
+                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
+                # UDPClientSocket.sendto(msg,dest)
+
+    def recieve_msg(self):
+        self.Chat_log.config(state=NORMAL)  # Allow to change the chat log when a new msg arrive
+        self.Chat_log.insert(END,
+                             "Welcome to the Server! You can now chat\n")
+        self.Chat_log.config(state=DISABLED)
+        while True:
+            try:  # Receive
+                meg_recv = client_socket.recv(1024)
+                # meg_recv = meg_recv.decode('UTF-8')
+                meg_recv = json.loads(meg_recv)
+                if not len(meg_recv):  # if you recieved an 0 length msg from the server
+                    print("connection closed by server")
+                    sys.exit()
+                msg_type = meg_recv['type']
+                if msg_type == MessageType.DOWNLOAD.name:
+                    server_port = meg_recv['msg']
+                    _thread.start_new_thread(self.download_file, (server_port, ))
+
+                else:
+                    self.Chat_log.config(state=NORMAL)
+                    self.Chat_log.insert(END,
+                                     meg_recv['msg'] + "\n")
+                    self.Chat_log.config(state=DISABLED)
+
+            except IOError as e:
+                if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
+                    print('Reading error', str(e))
+                    sys.exit()
+                continue
+            except Exception as e:
+                print('General error', str(e))
+                sys.exit()
+                pass
+
+    def send_msg(self):
+        self.Chat_log.config(state=DISABLED)
+        while True:
+            if self.msg:  # send
+                if self.msg.startswith('@PM['):  # Check if its a PM
+                    split_msg = self.msg.split()
+                    if split_msg[0].endswith(']'):
+                        to = split_msg[0]
+                        to = to[4:len(to) - 1]
+                        PM_msg = {
+                            "type": str(MessageType.Privatemsg.name),
+                            "username": str(self.name),
+                            "recipient": to,
+                            "msg": str(self.msg[len(split_msg[0]):])
+                        }
+                        PM_msg = json.dumps(PM_msg)
+                        client_socket.send(PM_msg.encode('UTF-8'))
+                elif self.msg == MessageType.USERSLIST.name:  # Check if its a User_list request
+                    User_req = {
+                        "type": str(MessageType.USERSLIST.name)
+                    }
+                    PM_msg = json.dumps(User_req)
+                    client_socket.send(PM_msg.encode('UTF-8'))
+                elif self.msg == MessageType.GETLISTFILE.name:  # Check if its a File server request
+                    User_req = {
+                        "type": str(MessageType.GETLISTFILE.name)
+                    }
+                    PM_msg = json.dumps(User_req)
+                    client_socket.send(PM_msg.encode('UTF-8'))
+                elif self.msg.startswith('+'):
+                    file_name = self.msg[1:]
+                    msg = {"type": str(MessageType.DOWNLOAD.name),
+                           "msg": file_name}
+                    down_msg = json.dumps(msg)
+                    client_socket.send(down_msg.encode('UTF-8'))
+                else:
+                    send_msg = {
+                        "type": str(MessageType['Publicmsg'].name),
+                        "username": str(self.name),
+                        "msg": str(self.msg)
+                    }
+                    send_msg = json.dumps(send_msg)
+                    client_socket.send(send_msg.encode('UTF-8'))
+            break
+
     def __init__(self):
         # Create a chat window and make it visible
         self.Chat_Window = Tk()
@@ -59,7 +217,8 @@ class ChatGUI:
         self.login = Toplevel()
         self.login.title("Login")
         self.login.resizable(width=False, height=False)
-        self.login.configure(width=500, height=400)
+        self.login.configure(width=400, height=320)
+
         # create a Label
         self.pls = Label(self.login,
                          text="Welcome to the Chat!\n  Please Enter your Username",
@@ -69,6 +228,7 @@ class ChatGUI:
         self.pls.place(relheight=0.15,
                        relx=0.2,
                        rely=0.07)
+
         # create a Label
         self.labelName = Label(self.login,
                                text="Username: ",
@@ -86,7 +246,7 @@ class ChatGUI:
         self.username.place(relwidth=0.3,
                             relheight=0.10,
                             relx=0.35,
-                            rely=0.2,
+                            rely=0.23,
                             )
 
         # set the focus of the cursor
@@ -100,7 +260,8 @@ class ChatGUI:
                                    command=lambda: self.Login(self.username.get()))
 
         self.login_button.place(relx=0.4,
-                                rely=0.55)
+                                rely=0.37)
+
         self.Chat_Window.mainloop()
 
     # receive and send message from/to different user/s
@@ -114,7 +275,7 @@ class ChatGUI:
         client_socket.send(user_connect.encode('UTF-8'))
         self.login.destroy()
         self.ChatRoom_Gui(UserName)
-        _thread.start_new_thread(self.recieve_msg,())
+        _thread.start_new_thread(self.recieve_msg, ())
         # recieve_thread = thread.Thread(target=self.recieve_msg)
         # recieve_thread.start()
 
@@ -138,17 +299,13 @@ class ChatGUI:
                                        bg='LightSkyBlue2')  # bg="#6173A4"
         self.user_option_label.pack(side=RIGHT)
 
-        self.progress = Progressbar(self.Chat_Window, orient=HORIZONTAL, length=100, mode='determinate')
-
-        self.progress.place(relheight=0.650,
-                            relwidth=0.8,
-                            rely=0.08)
-
         self.labelHead = Label(self.Chat_Window,
                                bg='LightSkyBlue2',
                                text="Username:" + self.name,
                                font=HeadFont,
-                               pady=3)
+                               pady=3,
+                               anchor='w',
+                               justify='left')
 
         self.labelHead.place(relwidth=1)
 
@@ -171,7 +328,7 @@ class ChatGUI:
 
         self.file = Label(self.Chat_Window,
                           bg='LightSkyBlue2',
-                          text="name:",
+                          text="File:",
                           anchor=W,
                           font=ChatFont,
                           height=110,
@@ -184,6 +341,17 @@ class ChatGUI:
         self.file_box = Entry(self.file,
                               bg='light grey',
                               font=ChatFont)
+
+        self.progress = Progressbar(self.file,
+                                    orient=HORIZONTAL,
+                                    length=250,
+
+                                    mode='determinate')
+
+        self.progress.place(
+            relheight=0.65,
+            rely=0.100,
+            relx=0.64)
 
         self.labelBottom.place(relwidth=1,
                                relheight=0.08,
@@ -260,177 +428,6 @@ class ChatGUI:
         scrollbar.config(command=self.Chat_log.yview, bg='SlateGray4', activebackground='SlateGray4')
 
         self.Chat_log.config(state=DISABLED)
-
-    # If the user list button or the server files button is pressed send a Userlist msg request or server list msg
-    # request depends on the type that entered 0=Userlist 1=Server files
-    def userList_serverList_button(self, type: int):
-        if type == 0:
-            self.msg = MessageType.USERSLIST.name
-        else:
-            self.msg = MessageType.GETLISTFILE.name
-        # send_thread = thread.Thread(target=self.send_msg)
-        # send_thread.start()
-        self.send_msg()
-
-    # function to basically start the thread for sending messages
-    def sendButton(self, msg):
-        # get a msg that was entered in the text box and send her
-        self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
-        self.msg = str(msg)
-        self.Msg_box.delete(0, END)
-        # send_thread = thread.Thread(target=self.send_msg)
-        # send_thread.start()
-        self.send_msg()
-
-    def download_Button(self, msg):
-        # get a msg that was entered in the text box and send her
-        self.Chat_log.config(state=DISABLED)  # prevent typing in the chat log.
-        self.msg = "+" + str(msg)
-        self.file_box.delete(0, END)
-        # send_thread = thread.Thread(target=self.send_msg)
-        # send_thread.start()
-        self.send_msg()
-
-    def download_file(self, server_port):
-        UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        dest = (server_ip, server_port)
-        connection = "Connected"
-        segments_recv=[]
-        self.progress['value']=0
-        # send a connected msg to the server so the server will have the client ip and port
-        UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
-        expection_seq = 0
-        segment_counter=0
-        while True:
-            try:  # get the msg from the server
-                msg, address = UDPClientSocket.recvfrom(2048)
-                msg = json.loads(msg)  # return the msg as a dict
-            except Exception as e:
-                print("Timeout")
-
-            # msg,address = UDPClientSocket.recvfrom(1024)
-            check_sum = msg["checksum"]
-            seq = msg["id"]
-            data_as_bytes = base64.b64decode(msg["data"].encode('UTF-8')) #recieve the data for the file
-            data_as_str = msg["data"]
-            with open(msg["filename"], 'wb+') as file:
-
-                if str(checksum(
-                        data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
-                    ack_msg = {
-                        "type": MessageType.ACK.name,
-                        "id": seq,
-                        "msg": "ACK" + seq,
-                        "checksum": checksum("ACK" + seq)
-                    }
-                    ack_msg = json.dumps(ack_msg)
-                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
-                    self.progress['value']=(msg["length"] / (segment_counter+1))*100
-                    segments_recv.append(data_as_bytes)
-                    segment_counter+=1
-                    if segment_counter == int(msg["length"]):
-                        for data in segments_recv:
-                            file.write(data)  # write the data you recieved in the file you opened
-                        break
-                # if seq == str(expection_seq):
-                #     expection_seq = 1 - expection_seq
-                else:
-                    negative_seq = str(1 - expection_seq)
-                    ack_msg = {
-                        "type": MessageType.ACK.name,
-                        "msg": "neg" + seq,
-                        "checksum": checksum("ACK" + seq)
-                    }
-                    ack_msg = json.dumps(ack_msg)
-                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
-                # UDPClientSocket.sendto(msg,dest)
-
-    def recieve_msg(self):
-        self.Chat_log.config(state=NORMAL)  # Allow to change the chat log when a new msg arrive
-        self.Chat_log.insert(END,
-                             "Welcome to the Server! You can now chat\n")
-        self.Chat_log.config(state=DISABLED)
-        while True:
-            try:  # Receive
-                meg_recv = client_socket.recv(1024)
-                # meg_recv = meg_recv.decode('UTF-8')
-                meg_recv = json.loads(meg_recv)
-                if not len(meg_recv):  # if you recieved an 0 length msg from the server
-                    print("connection closed by server")
-                    sys.exit()
-                # username_length = int(username_header.decode('UTF-8'))
-                msg_type = meg_recv['type']
-                if msg_type == MessageType.DOWNLOAD.name:
-                    server_port = meg_recv['msg']
-                    _thread.start_new_thread(self.download_file, (server_port, ))
-                    # down_thread = thread.Thread(target=self.download_file(server_port))
-                    # down_thread.start()
-                else:
-                    self.Chat_log.config(state=NORMAL)
-                    self.Chat_log.insert(END,
-                                     meg_recv['msg'] + "\n")
-                    self.Chat_log.config(state=DISABLED)
-                # elif msg_type == MessageType.Publicmsg.name or msg_type == MessageType.Privatemsg.name or msg_type == MessageType.USERSLIST.name:
-                #     self.Chat_log.config(state=NORMAL)
-                #     self.Chat_log.insert(END,
-                #                          meg_recv['msg'] + "\n")
-                #     self.Chat_log.config(state=DISABLED)
-
-            except IOError as e:
-                if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
-                    print('Reading error', str(e))
-                    sys.exit()
-                continue
-            except Exception as e:
-                print('General error', str(e))
-                sys.exit()
-                pass
-
-    def send_msg(self):
-        self.Chat_log.config(state=DISABLED)
-        while True:
-            if self.msg:  # send
-                if self.msg.startswith('@PM['):  # Check if its a PM
-                    split_msg = self.msg.split()
-                    if split_msg[0].endswith(']'):
-                        to = split_msg[0]
-                        to = to[4:len(to) - 1]
-                        PM_msg = {
-                            "type": str(MessageType.Privatemsg.name),
-                            "username": str(self.name),
-                            "recipient": to,
-                            "msg": str(self.msg[len(split_msg[0]):])
-                        }
-                        PM_msg = json.dumps(PM_msg)
-                        client_socket.send(PM_msg.encode('UTF-8'))
-                elif self.msg == MessageType.USERSLIST.name:  # Check if its a User_list request
-                    User_req = {
-                        "type": str(MessageType.USERSLIST.name)
-                    }
-                    PM_msg = json.dumps(User_req)
-                    client_socket.send(PM_msg.encode('UTF-8'))
-                elif self.msg == MessageType.GETLISTFILE.name:  # Check if its a File server request
-                    User_req = {
-                        "type": str(MessageType.GETLISTFILE.name)
-                    }
-                    PM_msg = json.dumps(User_req)
-                    client_socket.send(PM_msg.encode('UTF-8'))
-                elif self.msg.startswith('+'):
-                    file_name = self.msg[1:]
-                    msg = {"type": str(MessageType.DOWNLOAD.name),
-                           "msg": file_name}
-                    down_msg = json.dumps(msg)
-                    client_socket.send(down_msg.encode('UTF-8'))
-                else:
-                    send_msg = {
-                        "type": str(MessageType['Publicmsg'].name),
-                        "username": str(self.name),
-                        "msg": str(self.msg)
-                    }
-                    send_msg = json.dumps(send_msg)
-                    client_socket.send(send_msg.encode('UTF-8'))
-            break
-
 
 g = ChatGUI()
 client_socket.close()
