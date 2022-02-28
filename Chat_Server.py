@@ -98,13 +98,13 @@ def UDP_file_sender(filename, C_socket):
         with open("ServerFiles/" + filename, "rb") as file:  # open the file the client want
             data = file.read()  # as bytes!
     except Exception as e:
-        err_msg={"type":MessageType.Privatemsg.name,
-                 "msg": filename + "is not available in the server files!\n Try a different file name"}
-        err_msg=json.dumps(err_msg)
+        err_msg = {"type": MessageType.Privatemsg.name,
+                   "msg": filename + "is not available in the server files!\n Try a different file name"}
+        err_msg = json.dumps(err_msg)
         C_socket.send(err_msg.encode('UTF-8'))
         print("Fail", str(e))
     seq_num = 0
-    each_seg_size = 1000  # size of each seg
+    each_seg_size = 1400  # size of each seg
     total_segment_size = 0
     all_segments = {}
     while total_segment_size < len(data):
@@ -115,39 +115,51 @@ def UDP_file_sender(filename, C_socket):
         seq_num += 1
         all_segments[seq_num] = segment
         total_segment_size += each_seg_size
-
+    first_send=True
     for seg_id, seg in all_segments.items():
         ack_recv = False
         while not ack_recv:
             segment_as_str = base64.b64encode(seg).decode(
                 'UTF-8')  # need to send a data as a str (cant json a byte object)
-            msg = {
-                "checksum": str(checksum(segment_as_str)),
-                "id": str(seg_id),
-                "length": len(all_segments),
-                "data": segment_as_str,
-                "filename": str(filename)
-            }
-            msg = json.dumps(msg)
-            recv_UDP_sock.sendto(msg.encode('UTF-8'), connection[
+            if first_send == True:
+                seg_msg = {
+                    "checksum": str(checksum(segment_as_str)),
+                    "id": str(seg_id),
+                    "length": len(all_segments),
+                    "data": segment_as_str,
+                    "filename": str(filename)
+                }
+                first_send == False
+            else:
+                seg_msg = {
+                    "checksum": str(checksum(segment_as_str)),
+                    "id": str(seg_id),
+                    "data": segment_as_str,
+                }
+            seg_msg = json.dumps(seg_msg)
+            test = seg_msg.encode('UTF-8')
+            recv_UDP_sock.sendto(seg_msg.encode('UTF-8'), connection[
                 1])  # send the data to the client (connection[1] is the IP and port of the client)
 
-            recv_UDP_sock.settimeout(0.001)
+            recv_UDP_sock.settimeout(0.011)
             try:
-                msg, address = recv_UDP_sock.recvfrom(2048)
+                recv_msg, address = recv_UDP_sock.recvfrom(2048)
             except socket.timeout:
                 print("Time out")
             else:
-                msg = json.loads(msg)
-                print(msg)
-                check_sum = msg["checksum"]
-                ack_id = msg["id"]
-                ack = msg["msg"]
+                recv_msg = json.loads(recv_msg)
+                print(recv_msg)
+                check_sum = recv_msg["checksum"]
+                ack_id = recv_msg["id"]
+                ack = recv_msg["msg"]
                 if checksum(ack) == check_sum and ack_id == str(seg_id):
                     ack_recv = True
                 if ack.startswith("neg"):
                     ack_recv = False
-        # seq_num = 1 - seq_num
+                if int(ack_id) == len(all_segments):
+                    recv_UDP_sock.close()
+                    break
+                    # seq_num = 1 - seq_num
 
 
 def message_received(C_socket, C_address):
@@ -206,36 +218,36 @@ def message_received(C_socket, C_address):
 
 
         except Exception as e:
-            print(e)
-            print("Connection closed from " + users_List[sock])
-            user_left = users_List[sock]
-            socket_List.remove(sock)
-            del users_List[sock]
-            left_msg = {"type": str(MessageType.CONNECT.name),
-                        "msg": user_left + " has left the chat"}
-            left_msg = json.dumps(left_msg)
-            broadcast(left_msg.encode('UTF-8'))
+            # print("Connection closed from " + users_List[sock])
+            # user_left = users_List[sock]
+            # socket_List.remove(sock)
+            # del users_List[sock]
+            # left_msg = {"type": str(MessageType.CONNECT.name),
+            #             "msg": user_left + " has left the chat"}
+            # left_msg = json.dumps(left_msg)
+            # broadcast(left_msg.encode('UTF-8'))
+            return False
 
         if not len(message_dict):
-            print("Connection closed from " + users_List[sock])
-            user_left = users_List[sock]
-            socket_List.remove(sock)
-            del users_List[sock]
-            left_msg = {"type": str(MessageType.CONNECT.name),
-                        "msg": user_left + " has left the chat"}
-            left_msg = json.dumps(left_msg)
-            broadcast(left_msg.encode('UTF-8'))
+            # print("Connection closed from " + users_List[sock])
+            # user_left = users_List[sock]
+            # socket_List.remove(sock)
+            # del users_List[sock]
+            # left_msg = {"type": str(MessageType.CONNECT.name),
+            #             "msg": user_left + " has left the chat"}
+            # left_msg = json.dumps(left_msg)
+            # broadcast(left_msg.encode('UTF-8'))
             return False
 
     except:
-        print("Connection closed from " + users_List[sock])
-        user_left = users_List[sock]
-        socket_List.remove(sock)
-        del users_List[sock]
-        left_msg = {"type": str(MessageType.CONNECT.name),
-                    "msg": user_left + " has left the chat"}
-        left_msg = json.dumps(left_msg)
-        broadcast(left_msg.encode('UTF-8'))
+        # print("Connection closed from " + users_List[sock])
+        # user_left = users_List[sock]
+        # socket_List.remove(sock)
+        # del users_List[sock]
+        # left_msg = {"type": str(MessageType.CONNECT.name),
+        #             "msg": user_left + " has left the chat"}
+        # left_msg = json.dumps(left_msg)
+        # broadcast(left_msg.encode('UTF-8'))
         return False
 
 
@@ -249,8 +261,8 @@ while True:
                 "You are connected from:" + str((C_address[0])) + ":" + str(C_address[1]) + " your user name is: " +
                 users_List[C_socket])
         else:  # If someone is already connected
-            # message = message_received(sock, C_address)
-            message = _thread.start_new_thread(message_received, (sock, C_address))
+            #message = _thread.start_new_thread(message_received, (sock, C_address))
+            message = message_received(sock, C_address)
             if message is False:
                 print("Connection closed from " + users_List[sock])
                 user_left = users_List[sock]

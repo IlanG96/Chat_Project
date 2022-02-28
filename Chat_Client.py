@@ -63,7 +63,6 @@ class ChatGUI:
         # send_thread.start()
         self.send_msg()
 
-
     # function to basically start the thread for sending messages
     def sendButton(self, msg):
         # get a msg that was entered in the text box and send her
@@ -80,27 +79,41 @@ class ChatGUI:
         self.send_msg()
 
     def download_file(self, server_port):
+        counter = 0
         UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         dest = (server_ip, server_port)
         connection = "Connected"
-        segments_recv=[]
-        self.progress['value']=0
+        segments_recv = []
+        self.progress['value'] = 0
         # send a connected msg to the server so the server will have the client ip and port
-        UDPClientSocket.sendto(connection.encode('UTF-8'),dest)
+        UDPClientSocket.sendto(connection.encode('UTF-8'), dest)
         expection_seq = 0
-        segment_counter=0
+        segment_counter = 0
         while True:
             try:  # get the msg from the server
                 msg, address = UDPClientSocket.recvfrom(2048)
                 msg = json.loads(msg)  # return the msg as a dict
             except Exception as e:
-                print("Timeout")
+                print("Timeout: " + e)
+            if segment_counter==0:
+                filename=msg["filename"]
+                file_size=msg["length"]
             check_sum = msg["checksum"]
             seq = msg["id"]
-            data_as_bytes = base64.b64decode(msg["data"].encode('UTF-8')) #recieve the data for the file
+            data_as_bytes = base64.b64decode(msg["data"].encode('UTF-8'))  # recieve the data for the file
             data_as_str = msg["data"]
-            with open(msg["filename"], 'wb+') as file:
-
+            with open(filename, 'wb+') as file:
+                #Packet lost test
+                # if int(seq) == 9 and counter <= 2:
+                #     ack_msg = {
+                #         "type": MessageType.ACK.name,
+                #         "id": seq,
+                #         "msg": "neg" + seq,
+                #         "checksum": checksum("ACK" + seq)
+                #     }
+                #     ack_msg = json.dumps(ack_msg)
+                #     counter += 1
+                #     UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
                 if str(checksum(
                         data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
                     ack_msg = {
@@ -111,10 +124,10 @@ class ChatGUI:
                     }
                     ack_msg = json.dumps(ack_msg)
                     UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
-                    self.progress['value']=((segment_counter+1) / msg["length"])*100
+                    self.progress['value'] = ((segment_counter + 1) / file_size) * 100
                     segments_recv.append(data_as_bytes)
-                    segment_counter+=1
-                    if segment_counter == int(msg["length"]):
+                    segment_counter += 1
+                    if segment_counter == int(file_size):
                         for data in segments_recv:
                             file.write(data)  # write the data you recieved in the file you opened
                         break
@@ -122,8 +135,9 @@ class ChatGUI:
                     negative_seq = str(1 - expection_seq)
                     ack_msg = {
                         "type": MessageType.ACK.name,
+                        "id": seq,
                         "msg": "neg" + seq,
-                        "checksum": checksum("ACK" + seq)
+                        "checksum": checksum("neg" + seq)
                     }
                     ack_msg = json.dumps(ack_msg)
                     UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
@@ -145,12 +159,12 @@ class ChatGUI:
                 msg_type = meg_recv['type']
                 if msg_type == MessageType.DOWNLOAD.name:
                     server_port = meg_recv['msg']
-                    _thread.start_new_thread(self.download_file, (server_port, ))
+                    _thread.start_new_thread(self.download_file, (server_port,))
 
                 else:
                     self.Chat_log.config(state=NORMAL)
                     self.Chat_log.insert(END,
-                                     meg_recv['msg'] + "\n")
+                                         meg_recv['msg'] + "\n")
                     self.Chat_log.config(state=DISABLED)
 
             except IOError as e:
@@ -428,6 +442,7 @@ class ChatGUI:
         scrollbar.config(command=self.Chat_log.yview, bg='SlateGray4', activebackground='SlateGray4')
 
         self.Chat_log.config(state=DISABLED)
+
 
 g = ChatGUI()
 client_socket.close()
