@@ -125,7 +125,7 @@ def UDP_file_sender(filename, C_socket):
     }
     UDP_dic = json.dumps(UDP_dic)
     C_socket.send(UDP_dic.encode('UTF-8'))
-    connection = recv_UDP_sock.recvfrom(2048)
+    connection = recv_UDP_sock.recvfrom(65000)
     # open the file and read all the data
     try:
         with open("ServerFiles/" + filename, "rb") as file:  # open the file the client want

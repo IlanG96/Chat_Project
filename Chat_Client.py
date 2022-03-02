@@ -79,6 +79,14 @@ class ChatGUI:
         self.send_msg()
 
     def download_file(self, server_port):
+        """
+        this function connect through a UDP connection to the server. and start receiving segments of the requested
+        file. if the segment reciceved pass the check sum test the function send and ACK msg to the server. if the
+        segment fail the check sum test it mean the segment is damaged so it send a neg ACK msg that mean the client
+        didnt recieve a the segment.
+         :param server_port: the port that the client connect to the server.
+        :return:
+        """
         counter = 0
         UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         dest = (server_ip, server_port)
