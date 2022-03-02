@@ -143,6 +143,8 @@ def UDP_file_sender(filename, C_socket):
     total_segment_size = 0
     first_send = True
     Failed = False
+    half_sent = False
+    counter = 0
     last_fail = 99999
     CC = 1000  # the size to increase each time the server receive an ack
     while total_segment_size < len(data):
@@ -171,6 +173,11 @@ def UDP_file_sender(filename, C_socket):
         print("total sizee is", total_segment_size)
         print("curr speed is ", each_seg_size)
         while not ack_recv or not Failed:
+            if half_sent:
+                recv_msg, address = recv_UDP_sock.recvfrom(65000)
+                recv_msg = json.loads(recv_msg)
+                if MessageType.PROCEED.name in recv_msg:
+                    half_sent = False
             segment_as_str = base64.b64encode(segment).decode(
                 'UTF-8')  # need to send a data as a str (cant json a byte object)
             if first_send:
@@ -225,13 +232,16 @@ def UDP_file_sender(filename, C_socket):
                 # try to increase the segment size for a faster downloading
                 if checksum(ack) == check_sum and ack_id == str(seq_num):
                     ack_recv = True
+                    if total_segment_size >= total_size / 2 and counter == 0:
+                        half_sent = True
+                        counter += 1
                     if each_seg_size > last_fail:
                         last_fail += 3000
                     if last_fail - each_seg_size >= 1500:
                         each_seg_size += CC
                         CC += 1000
                     else:
-                        CC += 100 #try to get closer to the limit
+                        CC += 100  # try to get closer to the limit
                         each_seg_size += CC
                     break
                 # if we receive a neg ack then decrease the segment size (decrease the sending speed)
