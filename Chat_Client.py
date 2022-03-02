@@ -83,27 +83,38 @@ class ChatGUI:
         UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         dest = (server_ip, server_port)
         connection = "Connected"
-        segments_recv = []
+        segments_recv = {}
         self.progress['value'] = 0
         # send a connected msg to the server so the server will have the client ip and port
         UDPClientSocket.sendto(connection.encode('UTF-8'), dest)
-        expection_seq = 0
+        expection_seq = 1
         segment_counter = 0
+        total_recv_size = 0
         while True:
             try:  # get the msg from the server
-                msg, address = UDPClientSocket.recvfrom(2048)
+                msg, address = UDPClientSocket.recvfrom(65000)
                 msg = json.loads(msg)  # return the msg as a dict
+                print(msg)
             except Exception as e:
-                print("Timeout: " + e)
-            if segment_counter==0:
-                filename=msg["filename"]
-                file_size=msg["length"]
+                print("Timeout: ", e)
+                ack_msg = {
+                    "type": MessageType.ACK.name,
+                    "id": expection_seq,
+                    "msg": "neg" + seq,
+                    "checksum": checksum("neg" + seq)
+                }
+                ack_msg = json.dumps(ack_msg)
+                UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
+            if segment_counter == 0:
+                filename = msg["filename"]
+                file_size = int(msg["filesize"])
             check_sum = msg["checksum"]
             seq = msg["id"]
             data_as_bytes = base64.b64decode(msg["data"].encode('UTF-8'))  # recieve the data for the file
+            seg_size = len(data_as_bytes)
             data_as_str = msg["data"]
             with open(filename, 'wb+') as file:
-                #Packet lost test
+                # Packet lost test
                 # if int(seq) == 9 and counter <= 2:
                 #     ack_msg = {
                 #         "type": MessageType.ACK.name,
@@ -116,23 +127,28 @@ class ChatGUI:
                 #     UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
                 if str(checksum(
                         data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
-                    ack_msg = {
+                    if seq not in segments_recv:
+                        ack_msg = {
                         "type": MessageType.ACK.name,
                         "id": seq,
                         "msg": "ACK" + seq,
                         "checksum": checksum("ACK" + seq)
-                    }
-                    ack_msg = json.dumps(ack_msg)
-                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
-                    self.progress['value'] = ((segment_counter + 1) / file_size) * 100
-                    segments_recv.append(data_as_bytes)
-                    segment_counter += 1
-                    if segment_counter == int(file_size):
-                        for data in segments_recv:
-                            file.write(data)  # write the data you recieved in the file you opened
-                        break
+                        }
+                        ack_msg = json.dumps(ack_msg)
+                        UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
+                        self.progress['value'] = ((total_recv_size + seg_size) / file_size) * 100
+                        segments_recv[seq] = data_as_bytes
+                        segment_counter += 1
+                        total_recv_size = total_recv_size + seg_size
+                        expection_seq += 1
+                        test=total_recv_size - int(file_size)
+                        if total_recv_size - int(file_size) >= 0:
+                            for data in segments_recv.values():
+                                file.write(data)  # write the data you recieved in the file you opened
+                            break
+                    else:
+                        continue
                 else:
-                    negative_seq = str(1 - expection_seq)
                     ack_msg = {
                         "type": MessageType.ACK.name,
                         "id": seq,
@@ -151,7 +167,6 @@ class ChatGUI:
         while True:
             try:  # Receive
                 meg_recv = client_socket.recv(1024)
-                # meg_recv = meg_recv.decode('UTF-8')
                 meg_recv = json.loads(meg_recv)
                 if not len(meg_recv):  # if you recieved an 0 length msg from the server
                     print("connection closed by server")
@@ -214,7 +229,7 @@ class ChatGUI:
                     client_socket.send(down_msg.encode('UTF-8'))
                 else:
                     send_msg = {
-                        "type": str(MessageType['Publicmsg'].name),
+                        "type": str(MessageType.Publicmsg.name),
                         "username": str(self.name),
                         "msg": str(self.msg)
                     }
@@ -282,7 +297,7 @@ class ChatGUI:
 
     def Login(self, UserName):
         user_connect = {
-            "type": str(MessageType['CONNECT'].name),
+            "type": str(MessageType.CONNECT.name),
             "username": UserName,
         }
         user_connect = json.dumps(user_connect)

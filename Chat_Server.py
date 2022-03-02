@@ -54,12 +54,24 @@ socket_List.append(server_socket)
 
 # method to send a message to all the clients together
 def broadcast(message):
+    """
+    This function broadcast a message to all the user connected to the server
+    :param message: the message
+    :return: .
+    """
     for clients in users_List:
         clients.send(message)
 
 
 # (sock, recv, message)- sock - socket of the sender , recv - the recipient ..
 def PM(sock, recv, message):
+    """
+    this funcion send private msg to the clients.
+    :param sock: sender(socket!)
+    :param recv: the username of the recipient
+    :param message: the message the client wish to send
+    :return: .
+    """
     found = False
     sock.send(message)  # show the message to the sender
     if users_List[sock] == recv:  # if its a PM to himself.
@@ -76,9 +88,28 @@ def PM(sock, recv, message):
 
 
 def UDP_file_sender(filename, C_socket):
+    """
+    This is the Reliable UDP file transfer.
+    when the client wish to download a file its open a UDP connection with him.
+    first it sends the port that the client need to connect to through the TCP socket.
+    after the connection is established the server open the file the client wanted.
+    if the file doesn't exist it send a msg that the file is not available.
+    after that the program start splitting the file data to segments when each segment size start with 1000.
+    it wrap the data with id and a checksum and send it to the client.
+    if the client receive the data it send an ACK msg with the id number to the server.
+    when the server receive the ack msg it increase each segment size so the downloading progress will be faster.
+    when the client didn't receive the packet after the time out time it send the file again.
+    if the server receive a neg ack msg it means that there was a problem with the sending,
+    so it makes a new segment with smaller size.
+    what the idea of the program is stop and wait arq with TCP congestion control
+    :param filename: the file the user want
+    :param C_socket: the TCP socket of the client
+    :return:
+    """
     recv_UDP_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     UDP_port = 55001
     isconnected = False
+    # trying to find an available port for the client to connect
     while not isconnected:
         try:
             recv_UDP_sock.bind((server_ip, UDP_port))
@@ -87,6 +118,7 @@ def UDP_file_sender(filename, C_socket):
             print("Bind failed")
             UDP_port += 1
 
+    # send the port to the client
     UDP_dic = {
         "type": MessageType.DOWNLOAD.name,
         "msg": UDP_port
@@ -94,57 +126,94 @@ def UDP_file_sender(filename, C_socket):
     UDP_dic = json.dumps(UDP_dic)
     C_socket.send(UDP_dic.encode('UTF-8'))
     connection = recv_UDP_sock.recvfrom(2048)
+    # open the file and read all the data
     try:
         with open("ServerFiles/" + filename, "rb") as file:  # open the file the client want
             data = file.read()  # as bytes!
     except Exception as e:
+        # if the file dosent exist
         err_msg = {"type": MessageType.Privatemsg.name,
                    "msg": filename + "is not available in the server files!\n Try a different file name"}
         err_msg = json.dumps(err_msg)
         C_socket.send(err_msg.encode('UTF-8'))
         print("Fail", str(e))
+    total_size = os.path.getsize("ServerFiles/" + filename)
     seq_num = 0
-    each_seg_size = 1400  # size of each seg
+    each_seg_size = 1000  # size of each seg
     total_segment_size = 0
-    all_segments = {}
+    first_send = True
+    Failed = False
+    last_fail = 99999
+    CC = 1000  # the size to increase each time the server receive an ack
     while total_segment_size < len(data):
+        if Failed:  # if the fail try to make a smaller segment
+            if total_segment_size - each_seg_size >= 0:
+                total_segment_size -= each_seg_size
+            else:
+                total_segment_size = 0
+            if each_seg_size - CC >= 0:
+                each_seg_size = each_seg_size - CC
+            else:
+                each_seg_size = 1000
+            Failed = False
+        ack_recv = False
+        # if this it the last segment
         if total_segment_size + each_seg_size > len(data):
             segment = data[total_segment_size:]
         else:
+            # create a segment with the requested size
+            print(total_segment_size, total_segment_size + each_seg_size)
             segment = data[total_segment_size:total_segment_size + each_seg_size]
+        # sequence number for each segment
         seq_num += 1
-        all_segments[seq_num] = segment
+        # add the sement created to the total size sent untill now
         total_segment_size += each_seg_size
-    first_send=True
-    for seg_id, seg in all_segments.items():
-        ack_recv = False
-        while not ack_recv:
-            segment_as_str = base64.b64encode(seg).decode(
+        print("total sizee is", total_segment_size)
+        print("curr speed is ", each_seg_size)
+        while not ack_recv or not Failed:
+            segment_as_str = base64.b64encode(segment).decode(
                 'UTF-8')  # need to send a data as a str (cant json a byte object)
-            if first_send == True:
+            if first_send:
+                # if its the first send add the file name and size to the json.
                 seg_msg = {
                     "checksum": str(checksum(segment_as_str)),
-                    "id": str(seg_id),
-                    "length": len(all_segments),
+                    "id": str(seq_num),
                     "data": segment_as_str,
-                    "filename": str(filename)
+                    "filename": str(filename),
+                    "filesize": str(total_size)
                 }
-                first_send == False
+                first_send = False
             else:
                 seg_msg = {
                     "checksum": str(checksum(segment_as_str)),
-                    "id": str(seg_id),
+                    "id": str(seq_num),
                     "data": segment_as_str,
                 }
             seg_msg = json.dumps(seg_msg)
-            test = seg_msg.encode('UTF-8')
-            recv_UDP_sock.sendto(seg_msg.encode('UTF-8'), connection[
-                1])  # send the data to the client (connection[1] is the IP and port of the client)
-
-            recv_UDP_sock.settimeout(0.011)
+            print(seg_msg)
             try:
-                recv_msg, address = recv_UDP_sock.recvfrom(2048)
+                # check if the size is not bigger then the buffer
+                if len(seg_msg) >= 65000:
+                    last_fail = 65000
+                    Failed = True
+                    CC = int(CC / 2)
+                    break
+                else:
+                    # send the data to the client (connection[1] is the IP and port of the client)
+                    recv_UDP_sock.sendto(seg_msg.encode('UTF-8'), connection[1])
+            except Exception as e:
+                # if its fail to send, save the segment exit the While and create a new segment(line 137)
+                print(e)
+                CC = int(CC / 2)
+                last_fail = each_seg_size
+                Failed = True
+                break
+            # the time-out to receive an ack from the client
+            recv_UDP_sock.settimeout(1)
+            try:
+                recv_msg, address = recv_UDP_sock.recvfrom(65000)
             except socket.timeout:
+                # if there's a time-out go back to the start and send the segment again.
                 print("Time out")
             else:
                 recv_msg = json.loads(recv_msg)
@@ -152,17 +221,36 @@ def UDP_file_sender(filename, C_socket):
                 check_sum = recv_msg["checksum"]
                 ack_id = recv_msg["id"]
                 ack = recv_msg["msg"]
-                if checksum(ack) == check_sum and ack_id == str(seg_id):
+                # If the client receive an ack for the id the server send,
+                # try to increase the segment size for a faster downloading
+                if checksum(ack) == check_sum and ack_id == str(seq_num):
                     ack_recv = True
-                if ack.startswith("neg"):
-                    ack_recv = False
-                if int(ack_id) == len(all_segments):
-                    recv_UDP_sock.close()
+                    if each_seg_size > last_fail:
+                        last_fail += 3000
+                    if last_fail - each_seg_size >= 1500:
+                        each_seg_size += CC
+                        CC += 1000
+                    else:
+                        CC += 100 #try to get closer to the limit
+                        each_seg_size += CC
                     break
-                    # seq_num = 1 - seq_num
+                # if we receive a neg ack then decrease the segment size (decrease the sending speed)
+                elif ack.startswith("neg"):
+                    last_fail = each_seg_size
+                    CC = int(CC / 2)
+                    ack_recv = False
+                    Failed = True
+                    break
 
 
-def message_received(C_socket, C_address):
+def message_received(C_socket):
+    """
+    This function receive the messages the client send.
+    check the type of the message and execute the client request
+    :param C_socket: client socket
+    :return: True if it succeeded to execute the client request
+             False if there was a problem/the client disconnected
+    """
     try:
         message_dict = C_socket.recv(2048)
         message_dict = json.loads(message_dict)
@@ -256,13 +344,13 @@ while True:
     for sock in ready_to_read:
         if sock == server_socket:  # if a user just connected to the server
             C_socket, C_address = server_socket.accept()
-            message_received(C_socket, C_address)
+            message_received(C_socket)
             print(
                 "You are connected from:" + str((C_address[0])) + ":" + str(C_address[1]) + " your user name is: " +
                 users_List[C_socket])
         else:  # If someone is already connected
-            #message = _thread.start_new_thread(message_received, (sock, C_address))
-            message = message_received(sock, C_address)
+            # message = _thread.start_new_thread(message_received, (sock, C_address))
+            message = message_received(sock)
             if message is False:
                 print("Connection closed from " + users_List[sock])
                 user_left = users_List[sock]
