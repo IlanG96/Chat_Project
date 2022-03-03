@@ -33,6 +33,9 @@ class ChatGUI:
         # send_thread.start()
         self.send_msg()
 
+    def proceed_func(self):
+        self.proceed_flag = True
+
     # function to basically start the thread for sending messages
     def sendButton(self, msg):
         # get a msg that was entered in the text box and send her
@@ -69,6 +72,22 @@ class ChatGUI:
         segment_counter = 0
         total_recv_size = 0
         while True:
+            if self.progress["value"] < 50:
+                self.proceedButton["state"] = "disabled"
+            elif self.proceed_flag == False:
+                self.proceedButton["state"] = "normal"
+                self.Chat_log.config(state=NORMAL)  # Allow to change the chat log when a new msg arrive
+                self.Chat_log.insert(END,
+                                     "You downloaded 50% of the file\n Press proceed to continue\n")
+                self.Chat_log.config(state=DISABLED)
+                while self.proceed_flag == False:
+                    continue
+                proceed_msg = {
+                    "type": MessageType.PROCEED.name
+                }
+                proceed_msg = json.dumps(proceed_msg)
+                client_socket.sendto(proceed_msg.encode('UTF-8'), dest)
+
             try:  # get the msg from the server
                 msg, address = UDPClientSocket.recvfrom(65000)
                 msg = json.loads(msg)  # return the msg as a dict
@@ -107,10 +126,10 @@ class ChatGUI:
                         data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
                     if seq not in segments_recv:
                         ack_msg = {
-                        "type": MessageType.ACK.name,
-                        "id": seq,
-                        "msg": "ACK" + seq,
-                        "checksum": checksum("ACK" + seq)
+                            "type": MessageType.ACK.name,
+                            "id": seq,
+                            "msg": "ACK" + seq,
+                            "checksum": checksum("ACK" + seq)
                         }
                         ack_msg = json.dumps(ack_msg)
                         UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
@@ -119,7 +138,7 @@ class ChatGUI:
                         segment_counter += 1
                         total_recv_size = total_recv_size + seg_size
                         expection_seq += 1
-                        test=total_recv_size - int(file_size)
+                        test = total_recv_size - int(file_size)
                         if total_recv_size - int(file_size) >= 0:
                             for data in segments_recv.values():
                                 file.write(data)  # write the data you recieved in the file you opened
@@ -216,62 +235,37 @@ class ChatGUI:
             break
 
     def __init__(self):
-        # Create a chat window and make it visible
+        # Create a chat window
         self.Chat_Window = Tk()
         self.Chat_Window.withdraw()
 
-        # login window
+        # login screen
         self.login = Toplevel()
         self.login.title("Login")
         self.login.resizable(width=False, height=False)
         self.login.configure(width=400, height=320)
+        self.login.config(bg="#29C1D6")
 
-        # create a Label
-        self.pls = Label(self.login,
-                         text="Welcome to the Chat!\n  Please Enter your Username",
-                         justify=CENTER,
-                         font="Arial 14 bold")
+        # create a Label to login screen and place it
+        self.pls = Label(self.login, text="I&H\n  Please Enter your Username",
+                         justify=CENTER, font="Arial 14 bold", bg="#29C1D6")
+        self.pls.place(relheight=0.15, relx=0.2, rely=0.07)
 
-        self.pls.place(relheight=0.15,
-                       relx=0.2,
-                       rely=0.07)
+        # create a Label to username and entry box to login screen
+        self.labelName = Label(self.login, text="Username:",
+                               bg="#29C1D6", font="Arial 13", justify=CENTER)
+        self.labelName.place(relheight=0.2, relx=0.1, rely=0.2)
 
-        # create a Label
-        self.labelName = Label(self.login,
-                               text="Username: ",
-                               font="Arial 13")
+        self.username = Entry(self.login, bg="#C6DFE3", font="Arial 15", justify=CENTER)
 
-        self.labelName.place(relheight=0.2,
-                             relx=0.1,
-                             rely=0.2)
+        self.username.place(relwidth=0.3, relheight=0.10, relx=0.35, rely=0.23)
 
-        # create a entry box for
-        # tying the message
-        self.username = Entry(self.login,
-                              font="Arial 15")
+        self.login_button = Button(self.login, text="login", bg="#C6DFE3",
+                                   font="Arial 15 bold", command=lambda: self.Login(self.username.get()))
 
-        self.username.place(relwidth=0.3,
-                            relheight=0.10,
-                            relx=0.35,
-                            rely=0.23,
-                            )
-
-        # set the focus of the cursor
-        # self.username.focus()
-
-        # create a Continue Button
-        # along with action
-        self.login_button = Button(self.login,
-                                   text="CONTINUE",
-                                   font="Arial 15 bold",
-                                   command=lambda: self.Login(self.username.get()))
-
-        self.login_button.place(relx=0.4,
-                                rely=0.37)
+        self.login_button.place(relx=0.4, rely=0.37)
 
         self.Chat_Window.mainloop()
-
-    # receive and send message from/to different user/s
 
     def Login(self, UserName):
         user_connect = {
@@ -283,155 +277,92 @@ class ChatGUI:
         self.login.destroy()
         self.ChatRoom_Gui(UserName)
         _thread.start_new_thread(self.recieve_msg, ())
-        # recieve_thread = thread.Thread(target=self.recieve_msg)
-        # recieve_thread.start()
 
-    # The main layout of the chat
     def ChatRoom_Gui(self, name):
         HeadFont = tkFont.Font(family="Arial", size=16, weight="bold", slant="italic")
         ChatFont = tkFont.Font(family="Arial", size=14)
         SendFont = tkFont.Font(family="Arial", size=10, weight="bold")
-        img = PhotoImage(file="background.png")
-        self.Chat_Window.config(bg='LightSkyBlue2')  # bg='LightSkyBlue2'
+        self.Chat_Window.config(bg='#44BAEF')
         self.name = name
-        # to show chat window
-        img = PhotoImage(file="background.png")
         self.Chat_Window.deiconify()
         self.Chat_Window.title("CHATROOM")
         self.Chat_Window.resizable(width=True,
                                    height=True)
-
         self.Chat_Window.geometry("800x600")
-        self.user_option_label = Label(self.Chat_Window,
-                                       bg='LightSkyBlue2')  # bg="#6173A4"
-        self.user_option_label.pack(side=RIGHT)
 
-        self.labelHead = Label(self.Chat_Window,
-                               bg='LightSkyBlue2',
-                               text="Username:" + self.name,
-                               font=HeadFont,
-                               pady=3,
-                               anchor='w',
-                               justify='left')
+        self.top_label = Label(self.Chat_Window, bg='#44BAEF',
+                               text="Ilan & Haim Chat                    "
+                                    "                                "
+                                    "        Username:" + self.name, font=HeadFont,
+                               pady=9.5, anchor='w', )
 
-        self.labelHead.place(relwidth=1)
+        self.top_label.place(relwidth=1.2)
 
-        self.Chat_log = Text(self.Chat_Window,
-                             width=20,
-                             height=2,
-                             bg='LightSkyBlue2',
-                             font=ChatFont,
-                             padx=3,
-                             pady=3)
+        self.Chat_log = Text(self.Chat_Window,width=20,height=2,bg='LightSkyBlue2',font=ChatFont,
+                             padx=3,pady=3)
 
-        self.Chat_log.place(relheight=0.650,
-                            relwidth=0.8,
-                            rely=0.08)
+        self.Chat_log.place(relheight=0.650,relwidth=0.8,rely=0.08)
 
-        self.labelBottom = Label(self.Chat_Window,
-                                 bg='LightSkyBlue2',
-                                 height=110,
-                                 width=80)
+        self.labelBottom = Label(self.Chat_Window, bg='#44BAEF', height=110, width=80)
 
-        self.file = Label(self.Chat_Window,
-                          bg='LightSkyBlue2',
-                          text="File:",
-                          anchor=W,
-                          font=ChatFont,
-                          height=110,
-                          width=80)
+        self.file = Label(self.Chat_Window, bg='#44BAEF', text="File:", anchor=W, font=ChatFont, height=110, width=80)
 
-        self.file.place(relwidth=1,
-                        relheight=0.08,
-                        rely=0.820)
+        self.file.place(relwidth=1, relheight=0.08, rely=0.820)
 
-        self.file_box = Entry(self.file,
-                              bg='light grey',
-                              font=ChatFont)
+        self.file_box = Entry(self.file, bg='light grey', font=ChatFont)
 
-        self.progress = Progressbar(self.file,
-                                    orient=HORIZONTAL,
-                                    length=250,
+        self.progress = Progressbar(self.file, orient=HORIZONTAL, length=180, mode='determinate')
 
-                                    mode='determinate')
+        self.progress.place(relheight=0.65, rely=0.100, relx=0.64)
 
-        self.progress.place(
-            relheight=0.65,
-            rely=0.100,
-            relx=0.64)
+        self.labelBottom.place(relwidth=1, relheight=0.08, rely=0.900)
 
-        self.labelBottom.place(relwidth=1,
-                               relheight=0.08,
-                               rely=0.900)
+        self.file_box.place(relwidth=0.30, relheight=0.8, rely=0.020, relx=0.08)
 
-        self.file_box.place(relwidth=0.30,
-                            relheight=0.8,
-                            rely=0.020,
-                            relx=0.08)
+        self.Msg_box = Entry(self.labelBottom, bg='light grey', font=ChatFont)
 
-        self.Msg_box = Entry(self.labelBottom,
-                             bg='light grey',
-                             font=ChatFont)
-
-        # place the given widget
-        # into the gui window
-        self.Msg_box.place(relwidth=0.74,
-                           relheight=0.9,
-                           rely=0.008,
-                           relx=0.004)
+        self.Msg_box.place(relwidth=0.74, relheight=0.9, rely=0.008, relx=0.004)
 
         self.Msg_box.focus()
 
         # create a Send Button
-        self.buttonMsg = Button(self.labelBottom,
-                                text="Send",
-                                font=SendFont,
-                                width=20,
-                                bg='SlateGray4',
-                                command=lambda: self.sendButton(self.Msg_box.get()))
+        self.buttonMsg = Button(self.labelBottom, text="Send", font=SendFont, width=20,
+                                bg='SlateGray4', command=lambda: self.sendButton(self.Msg_box.get()))
 
-        self.buttonMsg.place(relx=0.77,
-                             rely=0.008,
-                             relheight=0.7,
-                             relwidth=0.22)
+        self.buttonMsg.place(relx=0.77, rely=0.008, relheight=0.7, relwidth=0.22)
 
-        self.file_button = Button(self.file,
-                                  text="download",
-                                  font=SendFont,
-                                  width=20,
-                                  bg='SlateGray4',
+        self.proceed_flag = False
+        self.proceedButton = Button(self.file, text="proceed", font=SendFont,
+                                    width=20, bg='SlateGray4', command=lambda: self.proceed_func())
+
+        self.proceedButton.place(relx=0.87,rely=0.4,anchor=W,
+                                 relheight=0.8,relwidth=0.12)
+
+        self.file_button = Button(self.file,text="download",font=SendFont,
+                                  width=20,bg='SlateGray4',
                                   command=lambda: self.download_Button(self.file_box.get()))
 
-        self.file_button.place(relx=0.40,
-                               rely=0.40,
-                               anchor=W,
-                               relheight=0.7,
-                               relwidth=0.22)
+        self.file_button.place(relx=0.40,rely=0.40,anchor=W,
+                               relheight=0.7,relwidth=0.22)
 
-        self.UserList = Button(self.user_option_label,
-                               text="User List",
-                               font=SendFont,
-                               width=15,
-                               bg='SlateGray4',
-                               pady=10,
+        # create option list to user-list and download-list
+        self.user_option_label = Label(self.Chat_Window, bg='#44BAEF')
+        self.user_option_label.pack(side=RIGHT)
+
+        self.UserList = Button(self.user_option_label,text="User List",font=SendFont,
+                               width=15,bg='SlateGray4',pady=10,
                                command=lambda: self.userList_serverList_button(0))
+
         self.UserList.pack(padx=3, pady=3)
-        self.Server_files = Button(self.user_option_label,
-                                   text="Show ServerFiles",
-                                   font=SendFont,
-                                   width=15,
-                                   bg='SlateGray4',
-                                   pady=10,
-                                   command=lambda: self.userList_serverList_button(1))
+
+        self.Server_files = Button(self.user_option_label,text="Show ServerFiles",
+                                   font=SendFont,width=15,bg='SlateGray4',
+                                   pady=10,command=lambda: self.userList_serverList_button(1))
+
         self.Server_files.pack(padx=3, pady=3)
-        # create a scroll bar
+
         scrollbar = Scrollbar(self.Chat_log)
-
-        # place the scroll bar
-        # into the gui window
-        scrollbar.pack(side=RIGHT, fill=Y)  # .place(relheight=1,
-        #                 relx=0.974)
-
+        scrollbar.pack(side=RIGHT, fill=Y)
         scrollbar.config(command=self.Chat_log.yview, bg='SlateGray4', activebackground='SlateGray4')
 
         self.Chat_log.config(state=DISABLED)

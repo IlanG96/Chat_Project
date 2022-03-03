@@ -144,9 +144,10 @@ def UDP_file_sender(filename, C_socket):
         print("curr speed is ", each_seg_size)
         while not ack_recv or not Failed:
             if half_sent:
-                recv_msg, address = recv_UDP_sock.recvfrom(65000)
+                #recv_msg, address = recv_UDP_sock.recvfrom(65000)
+                recv_msg, address = C_socket.recvfrom(65000)
                 recv_msg = json.loads(recv_msg)
-                if MessageType.PROCEED.name in recv_msg:
+                if recv_msg['type']==MessageType.PROCEED.name:
                     half_sent = False
             segment_as_str = base64.b64encode(segment).decode(
                 'UTF-8')  # need to send a data as a str (cant json a byte object)

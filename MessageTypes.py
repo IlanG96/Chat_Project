@@ -10,4 +10,5 @@ class MessageType(Enum):
     GETLISTFILE = 'get_list_file'
     DOWNLOAD = 'download'
     PROCEED = 'proceed'
+    ACK = 'acknowledgement'
 
