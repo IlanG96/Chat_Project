@@ -1,5 +1,5 @@
-## About Our Chat
-This project 
+## About Our Chat - I$H
+***This project id dedicated to build a messaging system , which includes ability of download files from server on UDP protocol but in reliable manner*** <br/>
 
 
 ## How To Use
