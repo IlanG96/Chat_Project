@@ -16,12 +16,10 @@ from MessageTypes import MessageType
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 port = 55000
-server_ip = '127.0.0.1'  # server IP
-client_socket.connect((server_ip, port))
 
 
 class ChatGUI:
-
+    server_ip = '127.0.0.1'  # server IP
     # If the user list button or the server files button is pressed send a Userlist msg request or server list msg
     # request depends on the type that entered 0=Userlist 1=Server files
     def userList_serverList_button(self, type: int):
@@ -62,7 +60,7 @@ class ChatGUI:
         """
         counter = 0
         UDPClientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        dest = (server_ip, server_port)
+        dest = (self.server_ip, server_port)
         connection = "Connected"
         segments_recv = {}
         self.progress['value'] = 0
@@ -257,17 +255,25 @@ class ChatGUI:
         self.labelName.place(relheight=0.2, relx=0.1, rely=0.2)
 
         self.username = Entry(self.login, bg="#C6DFE3", font="Arial 15", justify=CENTER)
+        self.your_ip = Entry(self.login, bg="#C6DFE3", font="Arial 15", justify=CENTER)
 
         self.username.place(relwidth=0.3, relheight=0.10, relx=0.35, rely=0.23)
-
+        self.your_ip.place(relwidth=0.3, relheight=0.10, relx=0.35, rely=0.6)
         self.login_button = Button(self.login, text="login", bg="#C6DFE3",
                                    font="Arial 15 bold", command=lambda: self.Login(self.username.get()))
+        self.your_ip_Button = Button(self.login, text="enter your ip", bg="#C6DFE3",
+                                   font="Arial 15 bold", command=lambda: self.change_ip(self.your_ip.get()))
 
         self.login_button.place(relx=0.4, rely=0.37)
+        self.your_ip_Button.place(relx=0.33, rely=0.75)
 
         self.Chat_Window.mainloop()
 
+    def change_ip(self,ip):
+        self.server_ip = ip
+
     def Login(self, UserName):
+        client_socket.connect((self.server_ip, port))
         user_connect = {
             "type": str(MessageType.CONNECT.name),
             "username": UserName,
