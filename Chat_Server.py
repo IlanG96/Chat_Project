@@ -113,41 +113,51 @@ def UDP_file_sender(filename, C_socket):
     total_segment_size = 0
     first_send = True
     Failed = False
+    change_mode = False
+    ssthresh = 64000 / 2
     half_sent = False
     counter = 0
     last_fail = 99999
     CC = 1000  # the size to increase each time the server receive an ack
     while total_segment_size < len(data):
+        # print("Last fail ", last_fail)
+        # print("ssh ", ssthresh)
         if Failed:  # if the fail try to make a smaller segment
+            change_mode = False  # Restart the congestion avoidance flag
             if total_segment_size - each_seg_size >= 0:
                 total_segment_size -= each_seg_size
             else:
                 total_segment_size = 0
-            if each_seg_size - CC >= 0:
-                each_seg_size = each_seg_size - CC
+            if each_seg_size >= ssthresh:
+                # Fast recovery
+                each_seg_size = int(last_fail / 3)
+                CC = 2000
             else:
                 each_seg_size = 1000
+                CC = 2000
             Failed = False
         ack_recv = False
         # if this it the last segment
         if total_segment_size + each_seg_size > len(data):
             segment = data[total_segment_size:]
+
         else:
             # create a segment with the requested size
-            print(total_segment_size, total_segment_size + each_seg_size)
+            # print(total_segment_size, total_segment_size + each_seg_size)
             segment = data[total_segment_size:total_segment_size + each_seg_size]
         # sequence number for each segment
         seq_num += 1
         # add the sement created to the total size sent untill now
         total_segment_size += each_seg_size
-        print("total sizee is", total_segment_size)
+        # print("total sizee is", total_segment_size)
+        print("CC ", CC)
         print("curr speed is ", each_seg_size)
         while not ack_recv or not Failed:
             if half_sent:
-                #recv_msg, address = recv_UDP_sock.recvfrom(65000)
+                # recv_msg, address = recv_UDP_sock.recvfrom(65000)
                 recv_msg, address = C_socket.recvfrom(65000)
                 recv_msg = json.loads(recv_msg)
-                if recv_msg['type']==MessageType.PROCEED.name:
+                if recv_msg['type'] == MessageType.PROCEED.name:
                     half_sent = False
             segment_as_str = base64.b64encode(segment).decode(
                 'UTF-8')  # need to send a data as a str (cant json a byte object)
@@ -168,11 +178,12 @@ def UDP_file_sender(filename, C_socket):
                     "data": segment_as_str,
                 }
             seg_msg = json.dumps(seg_msg)
-            print(seg_msg)
+            # print(seg_msg)
             try:
                 # check if the size is not bigger then the buffer
                 if len(seg_msg) >= 65000:
                     last_fail = 65000
+                    ssthresh = int(last_fail / 2)
                     Failed = True
                     CC = int(CC / 2)
                     break
@@ -184,6 +195,7 @@ def UDP_file_sender(filename, C_socket):
                 print(e)
                 CC = int(CC / 2)
                 last_fail = each_seg_size
+                ssthresh = int(last_fail / 2)
                 Failed = True
                 break
             # the time-out to receive an ack from the client
@@ -195,7 +207,7 @@ def UDP_file_sender(filename, C_socket):
                 print("Time out")
             else:
                 recv_msg = json.loads(recv_msg)
-                print(recv_msg)
+                # print(recv_msg)
                 check_sum = recv_msg["checksum"]
                 ack_id = recv_msg["id"]
                 ack = recv_msg["msg"]
@@ -206,19 +218,27 @@ def UDP_file_sender(filename, C_socket):
                     if total_segment_size >= total_size / 2 and counter == 0:
                         half_sent = True
                         counter += 1
-                    if each_seg_size > last_fail:
-                        last_fail += 3000
-                    if last_fail - each_seg_size >= 1500:
+                    if each_seg_size > last_fail:  # if manage to pass the last fail increase the value
+                        last_fail += 2000
+                    elif each_seg_size + CC >= last_fail - 10000:  # getting closer to the last fail
+                        CC = int(CC / 4)  # try to get closer to the limit
                         each_seg_size += CC
-                        CC += 1000
+                    elif each_seg_size >= ssthresh:  # Congestion avoidance
+                        if not change_mode:
+                            CC = int(CC / 2.5)
+                            change_mode = True
+                        each_seg_size += CC
+                        CC += 250
                     else:
-                        CC += 100  # try to get closer to the limit
+                        # Slow start
+                        CC += 1000  # try to get closer to the limit
                         each_seg_size += CC
                     break
                 # if we receive a neg ack then decrease the segment size (decrease the sending speed)
                 elif ack.startswith("neg"):
                     last_fail = each_seg_size
-                    CC = int(CC / 2)
+                    ssthresh = int(last_fail / 2)
+                    # CC = 1000
                     ack_recv = False
                     Failed = True
                     break
