@@ -3,7 +3,7 @@ import json
 import socket
 import time
 from tkinter.ttk import Progressbar
-
+from CheckSum import checksum
 import select
 import errno
 import sys
@@ -12,37 +12,7 @@ from tkinter import *
 import tkinter.font as tkFont
 from enum import Enum
 import _thread
-
-
-def checksum(buffer):
-    nleft = len(buffer)
-    sum = 0
-    pos = 0
-    while nleft > 1:
-        sum = ord(buffer[pos]) * 256 + (ord(buffer[pos + 1]) + sum)
-        pos = pos + 2
-        nleft = nleft - 2
-    if nleft == 1:
-        sum = sum + ord(buffer[pos]) * 256
-
-    sum = (sum >> 16) + (sum & 0xFFFF)
-    sum += (sum >> 16)
-    sum = (~sum & 0xFFFF)
-
-    return sum
-
-
-class MessageType(Enum):
-    CONNECT = 'connect'
-    USERSLIST = 'get_users'
-    DISCONNECT = 'disconnect'
-    Privatemsg = 'set_msg'
-    Publicmsg = 'set_msg_all'
-    GETLISTFILE = 'get_list_file'
-    DOWNLOAD = 'download'
-    PROCEED = 'proceed'
-    ACK = 'Acknowledgement '
-
+from MessageTypes import MessageType
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 port = 55000

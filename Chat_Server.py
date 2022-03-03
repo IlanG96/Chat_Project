@@ -2,43 +2,13 @@ import _thread
 import os
 import socket, select
 import json
-from enum import Enum
-import threading as thread
+from MessageTypes import MessageType
 import base64
-
+from CheckSum import checksum
 
 # os- provides functions for interacting with the operating system
 # socket -way of connecting two nodes on a network to communicate with each other
 # select - a direct interface to the underlying operating system implementation
-
-def checksum(buffer):
-    nleft = len(buffer)
-    sum = 0
-    pos = 0
-    while nleft > 1:
-        sum = ord(buffer[pos]) * 256 + (ord(buffer[pos + 1]) + sum)
-        pos = pos + 2
-        nleft = nleft - 2
-    if nleft == 1:
-        sum = sum + ord(buffer[pos]) * 256
-
-    sum = (sum >> 16) + (sum & 0xFFFF)
-    sum += (sum >> 16)
-    sum = (~sum & 0xFFFF)
-
-    return sum
-
-
-class MessageType(Enum):
-    CONNECT = 'connect'
-    USERSLIST = 'get_users'
-    DISCONNECT = 'disconnect'
-    Privatemsg = 'set_msg'
-    Publicmsg = 'set_msg_all'
-    GETLISTFILE = 'get_list_file'
-    DOWNLOAD = 'download'
-    PROCEED = 'proceed'
-
 
 server_ip = '127.0.0.1'  # server IP
 server_port = 55000  # Port
