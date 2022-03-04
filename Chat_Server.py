@@ -117,7 +117,7 @@ def UDP_file_sender(filename, C_socket):
     ssthresh = 64000 / 2
     half_sent = False
     counter = 0
-    last_fail = 99999
+    last_fail = 53000
     CC = 1000  # the size to increase each time the server receive an ack
     while total_segment_size < len(data):
         # print("Last fail ", last_fail)
@@ -150,8 +150,8 @@ def UDP_file_sender(filename, C_socket):
         # add the sement created to the total size sent untill now
         total_segment_size += each_seg_size
         # print("total sizee is", total_segment_size)
-        print("CC ", CC)
-        print("curr speed is ", each_seg_size)
+        # print("CC ", CC)
+        print(each_seg_size)
         while not ack_recv or not Failed:
             if half_sent:
                 # recv_msg, address = recv_UDP_sock.recvfrom(65000)
@@ -181,15 +181,8 @@ def UDP_file_sender(filename, C_socket):
             # print(seg_msg)
             try:
                 # check if the size is not bigger then the buffer
-                if len(seg_msg) >= 65000:
-                    last_fail = 65000
-                    ssthresh = int(last_fail / 2)
-                    Failed = True
-                    CC = int(CC / 2)
-                    break
-                else:
-                    # send the data to the client (connection[1] is the IP and port of the client)
-                    recv_UDP_sock.sendto(seg_msg.encode('UTF-8'), connection[1])
+                # send the data to the client (connection[1] is the IP and port of the client)
+                recv_UDP_sock.sendto(seg_msg.encode('UTF-8'), connection[1])
             except Exception as e:
                 # if its fail to send, save the segment exit the While and create a new segment(line 137)
                 print(e)
@@ -205,6 +198,10 @@ def UDP_file_sender(filename, C_socket):
             except socket.timeout:
                 # if there's a time-out go back to the start and send the segment again.
                 print("Time out")
+                CC = int(CC / 2)
+                last_fail = each_seg_size
+                ssthresh = int(last_fail / 2)
+                Failed = True
             else:
                 recv_msg = json.loads(recv_msg)
                 # print(recv_msg)
@@ -217,11 +214,11 @@ def UDP_file_sender(filename, C_socket):
                     ack_recv = True
                     if total_segment_size >= total_size / 2 and counter == 0:
                         half_sent = True
-                        counter += 1
-                    if each_seg_size > last_fail:  # if manage to pass the last fail increase the value
+                        counter = counter+1
+                    if each_seg_size+1000 >= last_fail:  # if manage to pass the last fail increase the value
                         last_fail += 2000
-                    elif each_seg_size + CC >= last_fail - 10000:  # getting closer to the last fail
-                        CC = int(CC / 4)  # try to get closer to the limit
+                    elif each_seg_size >= last_fail - 10000:  # getting closer to the last fail
+                        CC = 25  # try to get closer to the limit
                         each_seg_size += CC
                     elif each_seg_size >= ssthresh:  # Congestion avoidance
                         if not change_mode:
@@ -236,7 +233,6 @@ def UDP_file_sender(filename, C_socket):
                     break
                 # if we receive a neg ack then decrease the segment size (decrease the sending speed)
                 elif ack.startswith("neg"):
-                    last_fail = each_seg_size
                     ssthresh = int(last_fail / 2)
                     # CC = 1000
                     ack_recv = False

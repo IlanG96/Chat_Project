@@ -110,17 +110,17 @@ class ChatGUI:
             data_as_str = msg["data"]
             with open(filename, 'wb+') as file:
                 # Packet lost test
-                # if int(seq) == 9 and counter <= 2:
-                #     ack_msg = {
-                #         "type": MessageType.ACK.name,
-                #         "id": seq,
-                #         "msg": "neg" + seq,
-                #         "checksum": checksum("ACK" + seq)
-                #     }
-                #     ack_msg = json.dumps(ack_msg)
-                #     counter += 1
-                #     UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
-                if str(checksum(
+                if int(seq) == 40 and counter <= 2:
+                    ack_msg = {
+                        "type": MessageType.ACK.name,
+                        "id": seq,
+                        "msg": "neg" + seq,
+                        "checksum": checksum("ACK" + seq)
+                    }
+                    ack_msg = json.dumps(ack_msg)
+                    counter += 1
+                    UDPClientSocket.sendto(ack_msg.encode('UTF-8'), dest)
+                elif str(checksum(
                         data_as_str)) == check_sum:  # if the check sum is the same then send an ACK you recieved all the data
                     if seq not in segments_recv:
                         ack_msg = {
@@ -140,6 +140,7 @@ class ChatGUI:
                         if total_recv_size - int(file_size) >= 0:
                             for data in segments_recv.values():
                                 file.write(data)  # write the data you recieved in the file you opened
+                            self.proceed_flag=False
                             break
                     else:
                         continue
