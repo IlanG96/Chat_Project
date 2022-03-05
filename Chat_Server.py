@@ -154,7 +154,6 @@ def UDP_file_sender(filename, C_socket):
         print(each_seg_size)
         while not ack_recv or not Failed:
             if half_sent:
-                # recv_msg, address = recv_UDP_sock.recvfrom(65000)
                 recv_msg, address = C_socket.recvfrom(65000)
                 recv_msg = json.loads(recv_msg)
                 if recv_msg['type'] == MessageType.PROCEED.name:
@@ -178,7 +177,6 @@ def UDP_file_sender(filename, C_socket):
                     "data": segment_as_str,
                 }
             seg_msg = json.dumps(seg_msg)
-            # print(seg_msg)
             try:
                 # check if the size is not bigger then the buffer
                 # send the data to the client (connection[1] is the IP and port of the client)
@@ -303,36 +301,12 @@ def message_received(C_socket):
 
 
         except Exception as e:
-            # print("Connection closed from " + users_List[sock])
-            # user_left = users_List[sock]
-            # socket_List.remove(sock)
-            # del users_List[sock]
-            # left_msg = {"type": str(MessageType.CONNECT.name),
-            #             "msg": user_left + " has left the chat"}
-            # left_msg = json.dumps(left_msg)
-            # broadcast(left_msg.encode('UTF-8'))
             return False
 
         if not len(message_dict):
-            # print("Connection closed from " + users_List[sock])
-            # user_left = users_List[sock]
-            # socket_List.remove(sock)
-            # del users_List[sock]
-            # left_msg = {"type": str(MessageType.CONNECT.name),
-            #             "msg": user_left + " has left the chat"}
-            # left_msg = json.dumps(left_msg)
-            # broadcast(left_msg.encode('UTF-8'))
             return False
 
     except:
-        # print("Connection closed from " + users_List[sock])
-        # user_left = users_List[sock]
-        # socket_List.remove(sock)
-        # del users_List[sock]
-        # left_msg = {"type": str(MessageType.CONNECT.name),
-        #             "msg": user_left + " has left the chat"}
-        # left_msg = json.dumps(left_msg)
-        # broadcast(left_msg.encode('UTF-8'))
         return False
 
 

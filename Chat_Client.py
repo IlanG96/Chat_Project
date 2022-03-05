@@ -1,16 +1,11 @@
 import base64
 import json
 import socket
-import time
 from tkinter.ttk import Progressbar
 from CheckSum import checksum
-import select
 import errno
-import sys
-import threading as thread
 from tkinter import *
 import tkinter.font as tkFont
-from enum import Enum
 import _thread
 from MessageTypes import MessageType
 
@@ -27,8 +22,6 @@ class ChatGUI:
             self.msg = MessageType.USERSLIST.name
         else:
             self.msg = MessageType.GETLISTFILE.name
-        # send_thread = thread.Thread(target=self.send_msg)
-        # send_thread.start()
         self.send_msg()
 
     def proceed_func(self):
@@ -70,6 +63,10 @@ class ChatGUI:
         segment_counter = 0
         total_recv_size = 0
         while True:
+            if 0 < self.progress["value"] < 90 :
+                self.file_button["state"] = "disabled"
+            else:
+                self.file_button["state"] = "normal"
             if self.progress["value"] < 50:
                 self.proceedButton["state"] = "disabled"
             elif self.proceed_flag == False:
